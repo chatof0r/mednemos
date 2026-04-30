@@ -22,10 +22,11 @@ export default function Home() {
   const [selectedNiveau, setSelectedNiveau] = useState<Niveau | null>(null);
   const [viewSem, setViewSem] = useState<Sem>(period === 'S2' ? 'S2' : 'S1');
   const [selectedMatiere, setSelectedMatiere] = useState<string | null>(null);
-  const [selectedCours, setSelectedCours] = useState<string | null>(null);
-  const [selectedAnnee, setSelectedAnnee] = useState<string>('Toutes');
-  const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
+  const [selectedCours, setSelectedCours] = useState<string[]>([]);
   const [annees, setAnnees] = useState<number[]>([]);
+  const [selectedAnnees, setSelectedAnnees] = useState<number[]>([]);
+  const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
+  const [totalRows, setTotalRows] = useState(0);
   const [order, setOrder] = useState<Order>('official');
   const [launching, setLaunching] = useState(false);
 
@@ -36,10 +37,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!selectedMatiere || !selectedNiveau) return;
-    setSelectedCours(null);
-    setSelectedAnnee('Toutes');
-    setCourseCounts({});
+    setSelectedCours([]);
     setAnnees([]);
+    setSelectedAnnees([]);
+    setCourseCounts({});
+    setTotalRows(0);
 
     supabase
       .from('questions')
@@ -50,20 +52,38 @@ export default function Home() {
       .then(({ data }) => {
         const rows = data ?? [];
         const counts: Record<string, number> = {};
-        rows.forEach((r: { cours: string | null }) => {
-          if (r.cours) counts[r.cours] = (counts[r.cours] ?? 0) + 1;
+        rows.forEach((r: { cours: string[] | null }) => {
+          (r.cours ?? []).forEach(c => {
+            counts[c] = (counts[c] ?? 0) + 1;
+          });
         });
         setCourseCounts(counts);
+        setTotalRows(rows.length);
         const ys = [...new Set(rows.map((r: { annee: number | null }) => r.annee).filter(Boolean))] as number[];
-        setAnnees(ys.sort((a, b) => b - a));
+        const sorted = ys.sort((a, b) => b - a);
+        setAnnees(sorted);
+        setSelectedAnnees(sorted);
       });
   }, [selectedMatiere, selectedNiveau]);
 
   const switchSem = (s: Sem) => {
     setViewSem(s);
     setSelectedMatiere(null);
-    setSelectedCours(null);
-    setSelectedAnnee('Toutes');
+    setSelectedCours([]);
+    setAnnees([]);
+    setSelectedAnnees([]);
+  };
+
+  const toggleCours = (c: string) => {
+    setSelectedCours(prev =>
+      prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
+    );
+  };
+
+  const toggleAnnee = (a: number) => {
+    setSelectedAnnees(prev =>
+      prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]
+    );
   };
 
   const handleLaunch = async () => {
@@ -78,8 +98,8 @@ export default function Home() {
       .order('annee', { ascending: false })
       .order('numero_officiel', { ascending: true });
 
-    if (selectedCours) query = query.eq('cours', selectedCours);
-    if (selectedAnnee !== 'Toutes') query = query.eq('annee', parseInt(selectedAnnee));
+    if (selectedCours.length > 0) query = query.overlaps('cours', selectedCours);
+    if (selectedAnnees.length < annees.length) query = query.in('annee', selectedAnnees);
 
     const { data } = await query;
     const questions = (data ?? []) as Question[];
@@ -94,10 +114,11 @@ export default function Home() {
 
   const matieres = selectedNiveau ? getDisplayedMatieres(selectedNiveau) : [];
   const coursOptions = selectedMatiere ? (COURSES[selectedMatiere] ?? []) : [];
-  const totalCours = coursOptions.reduce((sum, c) => sum + (courseCounts[c] ?? 0), 0);
+  const allYearsSelected = selectedAnnees.length === annees.length;
 
   const btnSelected = 'bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 border-[#e3fe52]/60 text-[#0c0c0c] dark:text-[#0c0c0c]';
   const btnDefault = 'bg-white dark:bg-[#141414] border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/60 hover:border-slate-300 dark:hover:border-white/20';
+  const btnDisabled = 'bg-white dark:bg-[#141414] border-slate-100 dark:border-white/5 text-slate-300 dark:text-white/20 line-through';
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -112,7 +133,7 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-4">
           {(['P2', 'D1'] as Niveau[]).map(n => (
             <button key={n}
-              onClick={() => { setSelectedNiveau(n); setSelectedMatiere(null); setSelectedCours(null); }}
+              onClick={() => { setSelectedNiveau(n); setSelectedMatiere(null); setSelectedCours([]); setAnnees([]); setSelectedAnnees([]); }}
               className={`rounded-2xl p-5 text-left transition-all border-2 ${
                 selectedNiveau === n ? btnSelected : btnDefault
               }`}>
@@ -155,25 +176,25 @@ export default function Home() {
         </div>
       )}
 
-      {/* Step 3 — Cours avec compteurs */}
+      {/* Step 3 — Cours multi-select */}
       {selectedMatiere && coursOptions.length > 0 && (
         <div className="mb-8">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30 mb-3">3 · Cours</p>
           <div className="space-y-2">
-            <button onClick={() => setSelectedCours(null)}
+            <button onClick={() => setSelectedCours([])}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
-                selectedCours === null ? btnSelected : btnDefault
+                selectedCours.length === 0 ? btnSelected : btnDefault
               }`}>
               <span className="text-sm font-medium">Tous les cours</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                selectedCours === null ? 'bg-black/10' : 'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-white/40'
-              }`}>{totalCours}</span>
+                selectedCours.length === 0 ? 'bg-black/10' : 'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-white/40'
+              }`}>{totalRows}</span>
             </button>
             {coursOptions.map(c => {
               const count = courseCounts[c] ?? 0;
-              const isSel = selectedCours === c;
+              const isSel = selectedCours.includes(c);
               return (
-                <button key={c} onClick={() => setSelectedCours(c)}
+                <button key={c} onClick={() => toggleCours(c)}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                     isSel ? btnSelected : btnDefault
                   }`}>
@@ -190,21 +211,34 @@ export default function Home() {
         </div>
       )}
 
-      {/* Step 4 — Année */}
+      {/* Step 4 — Années toggle-off */}
       {selectedMatiere && annees.length > 0 && (
         <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30 mb-3">
-            {coursOptions.length > 0 ? '4' : '3'} · Année <span className="font-normal normal-case opacity-60">(optionnel)</span>
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {['Toutes', ...annees.map(String)].map(a => (
-              <button key={a} onClick={() => setSelectedAnnee(a)}
-                className={`px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${
-                  selectedAnnee === a ? btnSelected : btnDefault
-                }`}>
-                {a}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30">
+              {coursOptions.length > 0 ? '4' : '3'} · Année
+            </p>
+            {!allYearsSelected && (
+              <button
+                onClick={() => setSelectedAnnees(annees)}
+                className="text-xs text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60 transition-colors underline underline-offset-2"
+              >
+                Tout réactiver
               </button>
-            ))}
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {annees.map(a => {
+              const active = selectedAnnees.includes(a);
+              return (
+                <button key={a} onClick={() => toggleAnnee(a)}
+                  className={`px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${
+                    active ? btnSelected : btnDisabled
+                  }`}>
+                  {a}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

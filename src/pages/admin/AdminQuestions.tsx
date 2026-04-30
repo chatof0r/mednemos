@@ -152,7 +152,7 @@ export default function AdminQuestions() {
                     }`}>{q.niveau}</span>
                   </td>
                   <td className="py-3 pr-4 text-slate-700 max-w-[160px] truncate">{q.matiere}</td>
-                  <td className="py-3 pr-4 text-slate-500 max-w-[160px] truncate">{q.cours ?? '—'}</td>
+                  <td className="py-3 pr-4 text-slate-500 max-w-[160px] truncate">{q.cours?.join(', ') ?? '—'}</td>
                   <td className="py-3 pr-4 text-slate-500">{q.annee ?? '—'}</td>
                   <td className="py-3 pr-4">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${

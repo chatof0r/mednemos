@@ -18,8 +18,9 @@ interface QuestionFormProps {
 export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFormProps) {
   const [niveau, setNiveau] = useState<'P2' | 'D1'>(initial?.niveau ?? 'P2');
   const [matiere, setMatiere] = useState(initial?.matiere ?? '');
-  const [cours, setCours] = useState(initial?.cours ?? '');
+  const [cours, setCours] = useState<string[]>(initial?.cours ?? []);
   const [annee, setAnnee] = useState<number | ''>(initial?.annee ?? '');
+  const [session, setSession] = useState<1 | 2 | null>(initial?.session ?? null);
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
   const [type, setType] = useState<'QCM' | 'QRU'>(initial?.type ?? 'QCM');
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
@@ -36,17 +37,21 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const matieres = getAllMatieres(niveau);
   const coursOptions = matiere ? (COURSES[matiere] ?? []) : [];
 
-  // Reset matière et cours si on change de niveau
   const handleNiveauChange = (n: 'P2' | 'D1') => {
     setNiveau(n);
     setMatiere('');
-    setCours('');
+    setCours([]);
   };
 
-  // Reset cours si on change de matière
   const handleMatiereChange = (m: string) => {
     setMatiere(m);
-    setCours('');
+    setCours([]);
+  };
+
+  const toggleCours = (c: string) => {
+    setCours(prev =>
+      prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
+    );
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,8 +104,9 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const buildPayload = (uploadedImageUrl: string | null, statut: 'brouillon' | 'publiee') => ({
     niveau,
     matiere,
-    cours: cours || null,
+    cours: cours.length > 0 ? cours : null,
     annee: annee !== '' ? annee : null,
+    session: session,
     numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
     type,
     enonce: enonce.trim(),
@@ -112,7 +118,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
 
   const validate = () => {
     if (!matiere) return 'Sélectionnez une matière.';
-    if (!cours) return 'Sélectionnez un cours.';
+    if (cours.length === 0) return 'Sélectionnez au moins un cours.';
     if (!annee) return 'Sélectionnez une année.';
     if (!enonce.trim()) return "L'énoncé est requis.";
     if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
@@ -148,18 +154,23 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const previewQuestion: Question = {
     id: initial?.id ?? 'preview',
     created_at: '',
-    niveau, matiere, cours: cours || null,
+    niveau, matiere,
+    cours: cours.length > 0 ? cours : null,
     annee: annee !== '' ? annee : null,
+    session,
     numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
     type, enonce, image_url: imagePreview, items, reponses, statut: 'brouillon',
   };
 
-  // Determine which S1/S2 a matière belongs to (for label)
   const getSemLabel = (m: string): string => {
     if (CURRICULUM[niveau].S1.includes(m)) return 'S1';
     if (CURRICULUM[niveau].S2.includes(m)) return 'S2';
     return '';
   };
+
+  const refLabel = annee !== '' && numeroOfficiel !== ''
+    ? `Q${numeroOfficiel} / ${annee}${session ? `.${session}` : ''}`
+    : null;
 
   return (
     <div className="space-y-5">
@@ -215,9 +226,12 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
             </div>
           </div>
 
-          {/* Cours */}
+          {/* Cours — multi-select */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Cours *</label>
+            <label className="block text-xs text-slate-500 mb-1.5">
+              Cours *
+              <span className="ml-1 font-normal text-slate-400">(plusieurs possibles)</span>
+            </label>
             {!matiere ? (
               <p className="text-xs text-slate-400 italic">Sélectionnez d'abord une matière</p>
             ) : coursOptions.length === 0 ? (
@@ -227,9 +241,9 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
                 {coursOptions.map(c => (
                   <button
                     key={c}
-                    onClick={() => setCours(c)}
+                    onClick={() => toggleCours(c)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all text-left ${
-                      cours === c
+                      cours.includes(c)
                         ? 'border-blue-500 bg-blue-50 text-blue-700'
                         : 'border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}
@@ -248,7 +262,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
               {ANNEES.map(a => (
                 <button
                   key={a}
-                  onClick={() => setAnnee(a)}
+                  onClick={() => { setAnnee(a); setSession(null); }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                     annee === a
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -261,6 +275,31 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
             </div>
           </div>
 
+          {/* Session — visible quand une année est sélectionnée */}
+          {annee !== '' && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1.5">
+                Session
+                <span className="ml-1 font-normal text-slate-400">(optionnel)</span>
+              </label>
+              <div className="flex gap-2">
+                {([1, 2] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setSession(session === s ? null : s)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      session === s
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    Session {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Référencement officiel */}
           <div className="border-t border-slate-100 pt-4">
             <label className="block text-xs text-slate-500 mb-1.5">
@@ -268,8 +307,8 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
               <span className="ml-1 text-slate-400 font-normal">(numéro dans le sujet d'origine)</span>
             </label>
             <div className="flex items-center gap-3">
-              <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 min-w-[70px] text-center">
-                {annee !== '' ? annee : '—'}
+              <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 min-w-[80px] text-center">
+                {annee !== '' ? `${annee}${session ? `.${session}` : ''}` : '—'}
               </div>
               <span className="text-slate-400">·</span>
               <div className="flex items-center gap-1.5">
@@ -283,9 +322,9 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
                   className="w-20 border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
                 />
               </div>
-              {annee !== '' && numeroOfficiel !== '' && (
-                <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg">
-                  {annee} · Q{numeroOfficiel}
+              {refLabel && (
+                <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg font-mono">
+                  {refLabel}
                 </span>
               )}
             </div>

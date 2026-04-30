@@ -9,8 +9,9 @@ export interface Question {
   created_at: string;
   niveau: 'P2' | 'D1';
   matiere: string;
-  cours: string | null;
+  cours: string[] | null;
   annee: number | null;
+  session: 1 | 2 | null;
   type: 'QCM' | 'QRU';
   enonce: string;
   image_url: string | null;
@@ -35,7 +36,7 @@ export interface SessionConfig {
 export interface FilterConfig {
   niveau: 'P2' | 'D1';
   matiere: string;
-  cours: string | null;
+  cours: string[] | null;
   annee: number | null;
   order: 'official' | 'random';
 }
