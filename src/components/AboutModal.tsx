@@ -99,7 +99,7 @@ export default function AboutModal({ onClose, onAdminClick }: AboutModalProps) {
             <button
               onClick={handleSend}
               disabled={sending || !suggestion.trim()}
-              className="mt-2 w-full py-2 px-4 bg-slate-800 dark:bg-[#e3fe52]/10 border border-transparent dark:border-[#e3fe52]/30 text-white dark:text-[#e3fe52]/80 rounded-xl text-sm font-medium hover:bg-slate-700 dark:hover:bg-[#e3fe52]/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="mt-2 w-full py-2 px-4 bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 border border-transparent dark:border-[#e3fe52]/40 text-[#0c0c0c] dark:text-[#0c0c0c] rounded-xl text-sm font-medium hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               {sending ? 'Envoi...' : sent ? '✓ Envoyé !' : 'Envoyer'}
             </button>

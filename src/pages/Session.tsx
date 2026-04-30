@@ -166,9 +166,9 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
           <button
             onClick={onValidate}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all
-              bg-slate-800 dark:bg-[#e3fe52]/10 dark:border dark:border-[#e3fe52]/30
+              bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
               text-white dark:text-[#e3fe52]
-              hover:bg-slate-700 dark:hover:bg-[#e3fe52]/20"
+              hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
           >
             Valider
           </button>
@@ -176,9 +176,9 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
           <button
             onClick={onNext}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all
-              bg-slate-800 dark:bg-[#e3fe52]/10 dark:border dark:border-[#e3fe52]/30
+              bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
               text-white dark:text-[#e3fe52]
-              hover:bg-slate-700 dark:hover:bg-[#e3fe52]/20"
+              hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
           >
             {isLast ? 'Voir les résultats' : 'Question suivante →'}
           </button>
@@ -205,7 +205,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
               <button
                 onClick={sendRemark}
                 disabled={!remarkText.trim()}
-                className="flex-1 text-xs py-1.5 rounded-lg bg-slate-800 dark:bg-[#e3fe52]/10 dark:border dark:border-[#e3fe52]/30 text-white dark:text-[#e3fe52] font-medium hover:bg-slate-700 dark:hover:bg-[#e3fe52]/20 disabled:opacity-30 transition-colors"
+                className="flex-1 text-xs py-1.5 rounded-lg bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40 text-white dark:text-[#e3fe52] font-medium hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65 disabled:opacity-30 transition-colors"
               >
                 {remarkSent ? '✓ Envoyé' : 'Envoyer'}
               </button>
@@ -250,9 +250,9 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
         <button
           onClick={onRestart}
           className="px-6 py-3 rounded-xl font-semibold text-sm transition-all
-            bg-slate-800 dark:bg-[#e3fe52]/10 dark:border dark:border-[#e3fe52]/30
+            bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
             text-white dark:text-[#e3fe52]
-            hover:bg-slate-700 dark:hover:bg-[#e3fe52]/20"
+            hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
         >
           Nouvelle session
         </button>

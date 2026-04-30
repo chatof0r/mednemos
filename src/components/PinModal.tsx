@@ -15,25 +15,22 @@ export default function PinModal({ onClose }: PinModalProps) {
     inputRef.current?.focus();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setValue(v);
-    setError(false);
-    if (v.length >= 1) {
-      checkPin(v);
-    }
-  };
-
-  const checkPin = (pin: string) => {
+  const checkPin = () => {
     const correct = import.meta.env.VITE_ADMIN_PIN;
-    if (pin === correct) {
+    if (value === correct) {
       sessionStorage.setItem('admin_auth', 'true');
       onClose();
       navigate('/admin');
-    } else if (pin.length >= correct.length) {
+    } else {
       setError(true);
       setValue('');
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') checkPin();
+    if (e.key === 'Escape') onClose();
   };
 
   return (
@@ -46,16 +43,17 @@ export default function PinModal({ onClose }: PinModalProps) {
             </svg>
           </div>
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Espace administrateur</h2>
-          <p className="text-sm text-slate-400 dark:text-white/30 mt-1">Entrez votre code PIN</p>
+          <p className="text-sm text-slate-400 dark:text-white/30 mt-1">Entrez votre code d'accès</p>
         </div>
 
         <input
           ref={inputRef}
           type="password"
           value={value}
-          onChange={handleChange}
-          placeholder="••••••"
-          className={`w-full text-center text-xl font-bold tracking-widest border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/20
+          onChange={e => { setValue(e.target.value); setError(false); }}
+          onKeyDown={handleKeyDown}
+          placeholder="Code d'accès"
+          className={`w-full border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/20 text-sm
             ${error
               ? 'border-red-400 dark:border-red-500/50'
               : 'border-slate-200 dark:border-white/10 focus:border-[#e3fe52]/60 dark:focus:border-[#e3fe52]/40'
@@ -63,12 +61,23 @@ export default function PinModal({ onClose }: PinModalProps) {
         />
 
         {error && (
-          <p className="text-center text-sm text-red-500 dark:text-red-400/80 mt-3">Code incorrect, réessayez</p>
+          <p className="text-center text-sm text-red-500 dark:text-red-400/80 mt-3">Code incorrect</p>
         )}
 
         <button
+          onClick={checkPin}
+          disabled={!value.trim()}
+          className="w-full mt-4 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-30
+            bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 border border-transparent dark:border-[#e3fe52]/50
+            text-[#0c0c0c] dark:text-[#0c0c0c]
+            hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
+        >
+          Accéder
+        </button>
+
+        <button
           onClick={onClose}
-          className="w-full mt-4 py-2 text-sm text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50 transition-colors"
+          className="w-full mt-2 py-2 text-sm text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50 transition-colors"
         >
           Annuler
         </button>

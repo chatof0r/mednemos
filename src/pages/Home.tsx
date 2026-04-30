@@ -162,7 +162,7 @@ export default function Home() {
                 onClick={() => setSelectedMatiere(m)}
                 className={`px-3.5 py-2 rounded-xl text-sm font-medium transition-all border ${
                   selectedMatiere === m
-                    ? 'bg-[#e3fe52]/10 dark:bg-[#e3fe52]/10 border-[#e3fe52]/50 text-slate-800 dark:text-[#e3fe52]'
+                    ? 'bg-[#e3fe52]/10 dark:bg-[#e3fe52]/75 border-[#e3fe52]/50 text-slate-800 dark:text-[#e3fe52]'
                     : 'bg-white dark:bg-[#141414] border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/60 hover:border-slate-300 dark:hover:border-white/25'
                 }`}
               >
@@ -240,9 +240,9 @@ export default function Home() {
         onClick={handleLaunch}
         disabled={!selectedNiveau || !selectedMatiere || launching}
         className="w-full py-4 rounded-2xl font-semibold text-base transition-all
-          bg-slate-800 dark:bg-[#e3fe52]/10 dark:border dark:border-[#e3fe52]/30
+          bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
           text-white dark:text-[#e3fe52]
-          hover:bg-slate-700 dark:hover:bg-[#e3fe52]/20
+          hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65
           disabled:opacity-25 disabled:cursor-not-allowed"
       >
         {launching ? 'Chargement...' : 'Lancer la session →'}
