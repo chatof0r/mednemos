@@ -6,33 +6,21 @@ interface PinModalProps {
 }
 
 export default function PinModal({ onClose }: PinModalProps) {
-  const [digits, setDigits] = useState(['', '', '', '']);
+  const [value, setValue] = useState('');
   const [error, setError] = useState(false);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    inputRefs.current[0]?.focus();
+    inputRef.current?.focus();
   }, []);
 
-  const handleChange = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
-    const next = [...digits];
-    next[index] = value;
-    setDigits(next);
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setValue(v);
     setError(false);
-    if (value && index < 3) {
-      inputRefs.current[index + 1]?.focus();
-    }
-    if (value && index === 3) {
-      const pin = [...next].join('');
-      if (pin.length === 4) checkPin(pin);
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
+    if (v.length >= 1) {
+      checkPin(v);
     }
   };
 
@@ -42,50 +30,45 @@ export default function PinModal({ onClose }: PinModalProps) {
       sessionStorage.setItem('admin_auth', 'true');
       onClose();
       navigate('/admin');
-    } else {
+    } else if (pin.length >= correct.length) {
       setError(true);
-      setDigits(['', '', '', '']);
-      setTimeout(() => inputRefs.current[0]?.focus(), 50);
+      setValue('');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-white dark:bg-[#141414] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-8 transition-colors">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-12 h-12 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg className="w-5 h-5 text-slate-500 dark:text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-slate-800">Espace administrateur</h2>
-          <p className="text-sm text-slate-500 mt-1">Entrez votre code PIN à 4 chiffres</p>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Espace administrateur</h2>
+          <p className="text-sm text-slate-400 dark:text-white/30 mt-1">Entrez votre code PIN</p>
         </div>
 
-        <div className="flex gap-3 justify-center mb-4">
-          {digits.map((d, i) => (
-            <input
-              key={i}
-              ref={el => { inputRefs.current[i] = el; }}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={d}
-              onChange={e => handleChange(i, e.target.value)}
-              onKeyDown={e => handleKeyDown(i, e)}
-              className={`w-12 h-14 text-center text-xl font-bold border-2 rounded-xl outline-none transition-colors
-                ${error ? 'border-red-400 bg-red-50' : 'border-slate-200 focus:border-blue-500 bg-white'}`}
-            />
-          ))}
-        </div>
+        <input
+          ref={inputRef}
+          type="password"
+          value={value}
+          onChange={handleChange}
+          placeholder="••••••"
+          className={`w-full text-center text-xl font-bold tracking-widest border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/20
+            ${error
+              ? 'border-red-400 dark:border-red-500/50'
+              : 'border-slate-200 dark:border-white/10 focus:border-[#e3fe52]/60 dark:focus:border-[#e3fe52]/40'
+            }`}
+        />
 
         {error && (
-          <p className="text-center text-sm text-red-500 mb-4">Code incorrect, réessayez</p>
+          <p className="text-center text-sm text-red-500 dark:text-red-400/80 mt-3">Code incorrect, réessayez</p>
         )}
 
         <button
           onClick={onClose}
-          className="w-full mt-2 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          className="w-full mt-4 py-2 text-sm text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50 transition-colors"
         >
           Annuler
         </button>
