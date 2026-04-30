@@ -29,6 +29,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initial?.image_url ?? null);
+  const [importText, setImportText] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +83,20 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
     const lastLabel = items[items.length - 1].label;
     setItems(prev => prev.slice(0, -1));
     setReponses(prev => prev.filter(r => r !== lastLabel));
+  };
+
+  const parseAndImport = () => {
+    const parts = importText.split(';').map(s => s.trim()).filter(Boolean);
+    const newItems: Item[] = [];
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      const label = ITEM_LABELS[newItems.length];
+      if (!label) break;
+      newItems.push({ label, enonce: parts[i], justification: parts[i + 1] });
+    }
+    if (newItems.length === 0) return;
+    setItems(newItems);
+    setReponses([]);
+    setImportText('');
   };
 
   const toggleReponse = (label: string) => {
@@ -403,6 +418,29 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
             </button>
           </div>
         </div>
+
+        {/* Import rapide */}
+        <div className="mb-4 bg-slate-50 rounded-xl border border-slate-200 p-3">
+          <p className="text-xs font-medium text-slate-500 mb-2">Import rapide</p>
+          <p className="text-xs text-slate-400 mb-2">
+            Colle le texte au format : <span className="font-mono">Item A ; Correction A ; Item B ; Correction B ; ...</span>
+          </p>
+          <textarea
+            value={importText}
+            onChange={e => setImportText(e.target.value)}
+            rows={3}
+            placeholder="Colle le texte ici..."
+            className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-blue-400 resize-none bg-white mb-2"
+          />
+          <button
+            onClick={parseAndImport}
+            disabled={!importText.trim()}
+            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Remplir les items
+          </button>
+        </div>
+
         <div className="space-y-3">
           {items.map((item, i) => (
             <div key={item.label} className="flex items-start gap-3">
