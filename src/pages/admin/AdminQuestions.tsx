@@ -31,7 +31,7 @@ export default function AdminQuestions() {
     setQuestions(prev => prev.filter(q => q.id !== id));
   };
 
-  const handleSaved = (q: Question, _addAnother: boolean) => {
+  const handleSaved = (q: Question) => {
     setLastSaved(q);
     setView('list');
     setEditing(null);

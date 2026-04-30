@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Question, Item } from '../../types';
+import { CURRICULUM, COURSES, ANNEES, getAllMatieres } from '../../lib/curriculum';
 import QuestionPreview from './QuestionPreview';
 
 const ITEM_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -10,7 +11,7 @@ const defaultItems = (): Item[] =>
 
 interface QuestionFormProps {
   initial?: Question;
-  onSaved: (q: Question, addAnother: boolean) => void;
+  onSaved: (q: Question) => void;
   onCancel: () => void;
 }
 
@@ -18,7 +19,8 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const [niveau, setNiveau] = useState<'P2' | 'D1'>(initial?.niveau ?? 'P2');
   const [matiere, setMatiere] = useState(initial?.matiere ?? '');
   const [cours, setCours] = useState(initial?.cours ?? '');
-  const [annee, setAnnee] = useState(initial?.annee ? String(initial.annee) : '');
+  const [annee, setAnnee] = useState<number | ''>(initial?.annee ?? '');
+  const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
   const [type, setType] = useState<'QCM' | 'QRU'>(initial?.type ?? 'QCM');
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
   const [items, setItems] = useState<Item[]>(initial?.items ?? defaultItems());
@@ -30,6 +32,22 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const matieres = getAllMatieres(niveau);
+  const coursOptions = matiere ? (COURSES[matiere] ?? []) : [];
+
+  // Reset matière et cours si on change de niveau
+  const handleNiveauChange = (n: 'P2' | 'D1') => {
+    setNiveau(n);
+    setMatiere('');
+    setCours('');
+  };
+
+  // Reset cours si on change de matière
+  const handleMatiereChange = (m: string) => {
+    setMatiere(m);
+    setCours('');
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -51,8 +69,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
 
   const addItem = () => {
     if (items.length >= ITEM_LABELS.length) return;
-    const label = ITEM_LABELS[items.length];
-    setItems(prev => [...prev, { label, enonce: '', justification: '' }]);
+    setItems(prev => [...prev, { label: ITEM_LABELS[prev.length], enonce: '', justification: '' }]);
   };
 
   const removeItem = () => {
@@ -76,63 +93,41 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
     const path = `${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('question-images').upload(path, imageFile);
     if (error) throw error;
-    const { data } = supabase.storage.from('question-images').getPublicUrl(path);
-    return data.publicUrl;
+    return supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl;
   };
 
-  const buildQuestion = (uploadedImageUrl: string | null): Omit<Question, 'id' | 'created_at'> => ({
+  const buildPayload = (uploadedImageUrl: string | null, statut: 'brouillon' | 'publiee') => ({
     niveau,
-    matiere: matiere.trim(),
-    cours: cours.trim() || null,
-    annee: annee ? parseInt(annee) : null,
+    matiere,
+    cours: cours || null,
+    annee: annee !== '' ? annee : null,
+    numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
     type,
     enonce: enonce.trim(),
     image_url: uploadedImageUrl,
     items,
     reponses,
-    statut: 'brouillon',
+    statut,
   });
 
   const validate = () => {
-    if (!matiere.trim()) return 'La matière est requise.';
+    if (!matiere) return 'Sélectionnez une matière.';
+    if (!cours) return 'Sélectionnez un cours.';
+    if (!annee) return 'Sélectionnez une année.';
     if (!enonce.trim()) return "L'énoncé est requis.";
     if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
     if (reponses.length === 0) return 'Sélectionnez au moins une bonne réponse.';
     return null;
   };
 
-  const handleSaveDraft = async () => {
+  const save = async (statut: 'brouillon' | 'publiee') => {
     const err = validate();
     if (err) { setError(err); return; }
     setError(null);
     setSaving(true);
     try {
       const url = await uploadImage();
-      const payload = buildQuestion(url);
-      let saved: Question;
-      if (initial) {
-        const { data } = await supabase.from('questions').update(payload).eq('id', initial.id).select().single();
-        saved = data as Question;
-      } else {
-        const { data } = await supabase.from('questions').insert(payload).select().single();
-        saved = data as Question;
-      }
-      onSaved(saved, false);
-    } catch {
-      setError('Erreur lors de la sauvegarde.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePublish = async () => {
-    const err = validate();
-    if (err) { setError(err); return; }
-    setError(null);
-    setSaving(true);
-    try {
-      const url = await uploadImage();
-      const payload = { ...buildQuestion(url), statut: 'publiee' as const };
+      const payload = buildPayload(url, statut);
       let saved: Question;
       if (initial) {
         const { data } = await supabase.from('questions').update(payload).eq('id', initial.id).select().single();
@@ -142,9 +137,9 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
         saved = data as Question;
       }
       setShowPreview(false);
-      onSaved(saved, false);
+      onSaved(saved);
     } catch {
-      setError('Erreur lors de la publication.');
+      setError('Erreur lors de la sauvegarde.');
     } finally {
       setSaving(false);
     }
@@ -153,69 +148,154 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const previewQuestion: Question = {
     id: initial?.id ?? 'preview',
     created_at: '',
-    niveau, matiere, cours: cours || null, annee: annee ? parseInt(annee) : null,
+    niveau, matiere, cours: cours || null,
+    annee: annee !== '' ? annee : null,
+    numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
     type, enonce, image_url: imagePreview, items, reponses, statut: 'brouillon',
   };
 
+  // Determine which S1/S2 a matière belongs to (for label)
+  const getSemLabel = (m: string): string => {
+    if (CURRICULUM[niveau].S1.includes(m)) return 'S1';
+    if (CURRICULUM[niveau].S2.includes(m)) return 'S2';
+    return '';
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
           {error}
         </div>
       )}
 
-      {/* Metadata */}
+      {/* ── Informations ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Informations</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="space-y-4">
+
+          {/* Niveau */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Niveau</label>
-            <select
-              value={niveau}
-              onChange={e => setNiveau(e.target.value as 'P2' | 'D1')}
-              className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
-            >
-              <option value="P2">P2</option>
-              <option value="D1">D1</option>
-            </select>
+            <label className="block text-xs text-slate-500 mb-1.5">Niveau *</label>
+            <div className="flex gap-2">
+              {(['P2', 'D1'] as const).map(n => (
+                <button
+                  key={n}
+                  onClick={() => handleNiveauChange(n)}
+                  className={`px-5 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    niveau === n
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="sm:col-span-2">
-            <label className="block text-xs text-slate-500 mb-1">Matière *</label>
-            <input
-              type="text"
-              value={matiere}
-              onChange={e => setMatiere(e.target.value)}
-              placeholder="ex: Biochimie"
-              className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
-            />
-          </div>
+
+          {/* Matière */}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Année</label>
-            <input
-              type="number"
-              value={annee}
-              onChange={e => setAnnee(e.target.value)}
-              placeholder="ex: 2023"
-              className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
-            />
+            <label className="block text-xs text-slate-500 mb-1.5">Matière *</label>
+            <div className="flex flex-wrap gap-2">
+              {matieres.map(m => (
+                <button
+                  key={m}
+                  onClick={() => handleMatiereChange(m)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    matiere === m
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  {m}
+                  <span className="ml-1.5 text-slate-400 font-normal">{getSemLabel(m)}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="col-span-2 sm:col-span-4">
-            <label className="block text-xs text-slate-500 mb-1">Cours (optionnel)</label>
-            <input
-              type="text"
-              value={cours}
-              onChange={e => setCours(e.target.value)}
-              placeholder="ex: Métabolisme des lipides"
-              className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
-            />
+
+          {/* Cours */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5">Cours *</label>
+            {!matiere ? (
+              <p className="text-xs text-slate-400 italic">Sélectionnez d'abord une matière</p>
+            ) : coursOptions.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">Aucun cours défini pour cette matière</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {coursOptions.map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setCours(c)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all text-left ${
+                      cours === c
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Année */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5">Année *</label>
+            <div className="flex flex-wrap gap-2">
+              {ANNEES.map(a => (
+                <button
+                  key={a}
+                  onClick={() => setAnnee(a)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    annee === a
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Référencement officiel */}
+          <div className="border-t border-slate-100 pt-4">
+            <label className="block text-xs text-slate-500 mb-1.5">
+              Référencement officiel
+              <span className="ml-1 text-slate-400 font-normal">(numéro dans le sujet d'origine)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 min-w-[70px] text-center">
+                {annee !== '' ? annee : '—'}
+              </div>
+              <span className="text-slate-400">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-slate-500 font-medium">Q</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={numeroOfficiel}
+                  onChange={e => setNumeroOfficiel(e.target.value === '' ? '' : parseInt(e.target.value))}
+                  placeholder="14"
+                  className="w-20 border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
+                />
+              </div>
+              {annee !== '' && numeroOfficiel !== '' && (
+                <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                  {annee} · Q{numeroOfficiel}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Image */}
+      {/* ── Image ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Image (optionnel)</h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Image <span className="font-normal text-slate-400">(optionnel)</span></h3>
         {imagePreview ? (
           <div className="relative inline-block">
             <img src={imagePreview} alt="Aperçu" className="max-h-48 rounded-xl border border-slate-200 object-contain" />
@@ -231,7 +311,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
         ) : (
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -242,7 +322,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
         <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
       </div>
 
-      {/* Énoncé + Type */}
+      {/* ── Énoncé + Type ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-700">Énoncé *</h3>
@@ -264,33 +344,26 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
           value={enonce}
           onChange={e => setEnonce(e.target.value)}
           rows={4}
-          placeholder="Saisissez l'énoncé de la question..."
+          placeholder="Saisissez l'énoncé..."
           className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
         />
       </div>
 
-      {/* Items */}
+      {/* ── Items ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-700">Items de réponse</h3>
           <div className="flex items-center gap-2">
-            <button
-              onClick={removeItem}
-              disabled={items.length <= 2}
-              className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-red-300 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
+            <button onClick={removeItem} disabled={items.length <= 2}
+              className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-red-300 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               − Supprimer
             </button>
-            <button
-              onClick={addItem}
-              disabled={items.length >= ITEM_LABELS.length}
-              className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
+            <button onClick={addItem} disabled={items.length >= ITEM_LABELS.length}
+              className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               + Ajouter
             </button>
           </div>
         </div>
-
         <div className="space-y-3">
           {items.map((item, i) => (
             <div key={item.label} className="flex items-start gap-3">
@@ -298,27 +371,19 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
                 {item.label}
               </span>
               <div className="flex-1 grid sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={item.enonce}
-                  onChange={e => updateItem(i, 'enonce', e.target.value)}
+                <input type="text" value={item.enonce} onChange={e => updateItem(i, 'enonce', e.target.value)}
                   placeholder={`Énoncé item ${item.label}`}
-                  className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400"
-                />
-                <input
-                  type="text"
-                  value={item.justification}
-                  onChange={e => updateItem(i, 'justification', e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400" />
+                <input type="text" value={item.justification} onChange={e => updateItem(i, 'justification', e.target.value)}
                   placeholder="Justification (optionnel)"
-                  className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500"
-                />
+                  className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500" />
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Correct answers */}
+      {/* ── Réponses correctes ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">
           Réponses correctes *
@@ -326,49 +391,37 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
         </h3>
         <div className="flex flex-wrap gap-2">
           {items.map(item => (
-            <button
-              key={item.label}
-              onClick={() => toggleReponse(item.label)}
+            <button key={item.label} onClick={() => toggleReponse(item.label)}
               className={`w-10 h-10 rounded-xl font-bold text-sm transition-all ${
-                reponses.includes(item.label)
-                  ? 'bg-green-500 text-white'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}
-            >
+                reponses.includes(item.label) ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}>
               {item.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Preview */}
+      {/* ── Prévisualisation ── */}
       {showPreview && (
         <QuestionPreview
           question={previewQuestion}
-          onPublish={handlePublish}
+          onPublish={() => save('publiee')}
           onClose={() => setShowPreview(false)}
         />
       )}
 
-      {/* Actions */}
+      {/* ── Actions ── */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <button
-          onClick={() => setShowPreview(v => !v)}
-          className="flex-1 py-2.5 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold text-sm hover:bg-blue-50 transition-colors"
-        >
-          {showPreview ? 'Masquer la prévisualisation' : 'Prévisualiser'}
+        <button onClick={() => setShowPreview(v => !v)}
+          className="flex-1 py-2.5 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold text-sm hover:bg-blue-50 transition-colors">
+          {showPreview ? 'Masquer' : 'Prévisualiser'}
         </button>
-        <button
-          onClick={handleSaveDraft}
-          disabled={saving}
-          className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 disabled:opacity-50 transition-colors"
-        >
+        <button onClick={() => save('brouillon')} disabled={saving}
+          className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 disabled:opacity-50 transition-colors">
           {saving ? 'Sauvegarde...' : 'Enregistrer brouillon'}
         </button>
-        <button
-          onClick={onCancel}
-          className="py-2.5 px-4 rounded-xl text-slate-400 text-sm hover:text-slate-600 transition-colors"
-        >
+        <button onClick={onCancel}
+          className="py-2.5 px-4 rounded-xl text-slate-400 text-sm hover:text-slate-600 transition-colors">
           Annuler
         </button>
       </div>

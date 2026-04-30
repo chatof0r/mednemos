@@ -17,6 +17,7 @@ export interface Question {
   items: Item[];
   reponses: string[];
   statut: 'brouillon' | 'publiee';
+  numero_officiel: number | null;
 }
 
 export interface Suggestion {
