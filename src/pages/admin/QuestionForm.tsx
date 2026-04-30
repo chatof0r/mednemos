@@ -151,16 +151,19 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
       const payload = buildPayload(url, statut);
       let saved: Question;
       if (initial) {
-        const { data } = await supabase.from('questions').update(payload).eq('id', initial.id).select().single();
+        const { data, error } = await supabase.from('questions').update(payload).eq('id', initial.id).select().single();
+        if (error) throw error;
         saved = data as Question;
       } else {
-        const { data } = await supabase.from('questions').insert(payload).select().single();
+        const { data, error } = await supabase.from('questions').insert(payload).select().single();
+        if (error) throw error;
         saved = data as Question;
       }
       setShowPreview(false);
       onSaved(saved);
-    } catch {
-      setError('Erreur lors de la sauvegarde.');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message;
+      setError(msg ? `Erreur : ${msg}` : 'Erreur lors de la sauvegarde.');
     } finally {
       setSaving(false);
     }
@@ -490,12 +493,16 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
       {/* ── Actions ── */}
       <div className="flex flex-col sm:flex-row gap-3">
         <button onClick={() => setShowPreview(v => !v)}
-          className="flex-1 py-2.5 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold text-sm hover:bg-blue-50 transition-colors">
-          {showPreview ? 'Masquer' : 'Prévisualiser'}
+          className="py-2.5 px-4 rounded-xl border-2 border-blue-200 text-blue-600 font-semibold text-sm hover:bg-blue-50 transition-colors">
+          {showPreview ? 'Masquer' : 'Aperçu'}
         </button>
         <button onClick={() => save('brouillon')} disabled={saving}
           className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 disabled:opacity-50 transition-colors">
-          {saving ? 'Sauvegarde...' : 'Enregistrer brouillon'}
+          {saving ? 'Sauvegarde...' : 'Brouillon'}
+        </button>
+        <button onClick={() => save('publiee')} disabled={saving}
+          className="flex-1 py-2.5 rounded-xl bg-green-600 text-white font-semibold text-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
+          {saving ? 'Publication...' : 'Publier'}
         </button>
         <button onClick={onCancel}
           className="py-2.5 px-4 rounded-xl text-slate-400 text-sm hover:text-slate-600 transition-colors">
