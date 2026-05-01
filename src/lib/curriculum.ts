@@ -17,6 +17,32 @@ export const COURSES: Record<string, string[]> = {
 
   // ── P2 ───────────────────────────────────────────────────────────────────
 
+  'Appareil Locomoteur': [
+    'Anatomie du membre sup',
+    'Physiopathologie tissulaire et moléculaire',
+    'Sémiologie rhumatologie',
+    'Physiologie musculaire',
+    'Anatomie du membre inférieur (1)',
+    'Équilibre et posture',
+    'Anatomie du membre inférieur (2)',
+    'Anatomie du rachis (1)',
+    'Somesthésie douleur',
+    'Séméiologie chirurgicale - hanche',
+    'Sémiologie chirurgicale - épaule',
+    'Sémiologie chirurgicale - genou',
+    'Sémiologie chirurgicale - rachis',
+    'Rachialgie et radiculalgie',
+    'Anatomie du rachis (2)',
+    'Séméiologie chirurgicale - membre supérieur',
+    'Anatomie du rachis (3)',
+    'Histo et histopatho du tissu musculaire strié squelettique',
+    'Radioanatomie ostéoarticulaire',
+    'Médecine physique et de réadaptation',
+    'Sémiologie de l\'image en médecine nucléaire',
+    'Séméiologie rhumatologie - arthrite',
+    'Séméiologie rhumatologie - os',
+  ],
+
   'Tête et cou': [
     'Histologie organe des sens',
     'Biophysique et physiologie de l\'audition',
