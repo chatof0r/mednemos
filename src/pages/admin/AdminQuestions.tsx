@@ -21,7 +21,9 @@ export default function AdminQuestions() {
     const { data, error } = await supabase
       .from('questions')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('annee', { ascending: false, nullsFirst: false })
+      .order('session', { ascending: false, nullsFirst: false })
+      .order('numero_officiel', { ascending: true, nullsFirst: false });
     if (error) console.error('load error:', error);
     setQuestions((data ?? []) as Question[]);
     setLoading(false);
