@@ -281,7 +281,7 @@ export default function AdminQuestions() {
                         </td>
                       </tr>
                     )}
-                    <tr key={q.id} className="hover:bg-slate-50/50 transition-colors border-t border-slate-50 first:border-t-0">
+                    <tr key={q.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-3 pr-4">
                         <span className="text-xs font-mono font-medium text-slate-600">{ref}</span>
                       </td>
