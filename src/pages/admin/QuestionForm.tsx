@@ -423,7 +423,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
               <img
                 src={imagePreview}
                 alt="Aperçu"
-                className="w-full object-contain max-h-72"
+                className="w-full block"
                 onLoad={measureContainer}
               />
               {/* Cercle hotspot — rayon en px pour un vrai cercle */}

@@ -186,7 +186,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             <img
               src={question.image_url ?? ''}
               alt="Zone à identifier"
-              className="w-full object-contain"
+              className="w-full block"
               onLoad={() => {
                 const el = zoneContainerRef.current;
                 if (el) setZonePxW(el.offsetWidth);
