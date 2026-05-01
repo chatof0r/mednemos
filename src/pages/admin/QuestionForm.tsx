@@ -34,6 +34,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const matieres = getAllMatieres(niveau);
   const coursOptions = matiere ? (COURSES[matiere] ?? []) : [];
@@ -143,7 +144,11 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
 
   const save = async (statut: 'brouillon' | 'publiee') => {
     const err = validate();
-    if (err) { setError(err); return; }
+    if (err) {
+      setError(err);
+      setTimeout(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -193,7 +198,10 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   return (
     <div className="space-y-5">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+        <div ref={errorRef} className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" />
+          </svg>
           {error}
         </div>
       )}
