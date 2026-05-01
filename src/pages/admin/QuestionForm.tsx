@@ -32,6 +32,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
   const [importText, setImportText] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -56,11 +57,29 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
     );
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const applyImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) applyImageFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) applyImageFile(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const file = Array.from(e.clipboardData.items)
+      .find(item => item.type.startsWith('image/'))
+      ?.getAsFile();
+    if (file) applyImageFile(file);
   };
 
   const removeImage = () => {
@@ -376,7 +395,11 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Image <span className="font-normal text-slate-400">(optionnel)</span></h3>
         {imagePreview ? (
-          <div className="relative inline-block">
+          <div
+            className="relative inline-block"
+            onPaste={handlePaste}
+            tabIndex={0}
+          >
             <img src={imagePreview} alt="Aperçu" className="max-h-48 rounded-xl border border-slate-200 object-contain" />
             <button
               onClick={removeImage}
@@ -388,15 +411,27 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
             </button>
           </div>
         ) : (
-          <button
+          <div
             onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
+            onDrop={handleDrop}
+            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragEnter={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onPaste={handlePaste}
+            tabIndex={0}
+            className={`flex flex-col items-center justify-center gap-2 w-full py-6 border-2 border-dashed rounded-xl cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-blue-300 ${
+              isDragging
+                ? 'border-blue-400 bg-blue-50 text-blue-500'
+                : 'border-slate-200 text-slate-400 hover:border-blue-300 hover:text-blue-500'
+            }`}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Ajouter une image
-          </button>
+            <span className="text-sm">
+              {isDragging ? "Déposer l'image ici" : 'Cliquer, glisser ou coller (⌘V) une image'}
+            </span>
+          </div>
         )}
         <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
       </div>
