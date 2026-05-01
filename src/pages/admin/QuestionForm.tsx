@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Question, Item } from '../../types';
+import { Question, Item, Hotspot } from '../../types';
 import { CURRICULUM, COURSES, ANNEES, getAllMatieres } from '../../lib/curriculum';
 import QuestionPreview from './QuestionPreview';
 
@@ -24,7 +24,10 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const [annee, setAnnee] = useState<number | ''>(seed?.annee ?? '');
   const [session, setSession] = useState<1 | 2 | null>(seed?.session ?? null);
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
-  const [type, setType] = useState<'QCM' | 'QRU'>(seed?.type ?? 'QCM');
+  const [type, setType] = useState<'QCM' | 'QRU' | 'QZONE'>(seed?.type ?? 'QCM');
+  const [hotspot, setHotspot] = useState<Hotspot | null>(initial?.hotspot ?? null);
+  const [hotspotAR, setHotspotAR] = useState(1); // aspect-ratio du conteneur image
+  const hotspotContainerRef = useRef<HTMLDivElement>(null);
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
   const [items, setItems] = useState<Item[]>(initial?.items ?? defaultItems());
   const [reponses, setReponses] = useState<string[]>(initial?.reponses ?? []);
@@ -152,16 +155,32 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     type,
     enonce: enonce.trim(),
     image_url: uploadedImageUrl,
-    items,
-    reponses,
+    items: type === 'QZONE' ? [] : items,
+    reponses: type === 'QZONE' ? [] : reponses,
+    hotspot: type === 'QZONE' ? hotspot : null,
     statut,
   });
+
+  // Handler clic sur l'image pour définir le centre du hotspot
+  const handleHotspotClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ar = rect.width / rect.height;
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.width) * 100; // % de la LARGEUR (unité uniforme)
+    setHotspotAR(ar);
+    setHotspot(prev => ({ x, y, radius: prev?.radius ?? 8 }));
+  }, []);
 
   const validate = () => {
     if (!matiere) return 'Sélectionnez une matière.';
     if (cours.length === 0) return 'Sélectionnez au moins un cours.';
     if (!annee) return 'Sélectionnez une année.';
     if (!enonce.trim()) return "L'énoncé est requis.";
+    if (type === 'QZONE') {
+      if (!imagePreview) return 'Une image est requise pour une question QZONE.';
+      if (!hotspot) return "Cliquez sur l'image pour définir la zone de réponse.";
+      return null;
+    }
     if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
     if (reponses.length === 0) return 'Sélectionnez au moins une bonne réponse.';
     return null;
@@ -207,7 +226,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     annee: annee !== '' ? annee : null,
     session,
     numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
-    type, enonce, image_url: imagePreview, items, reponses, statut: 'brouillon',
+    type, enonce, image_url: imagePreview, items, reponses, hotspot, statut: 'brouillon',
   };
 
   const getSemLabel = (m: string): string => {
@@ -387,20 +406,111 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Image <span className="font-normal text-slate-400">(optionnel)</span></h3>
         {imagePreview ? (
-          <div
-            className="relative inline-block"
-            onPaste={handlePaste}
-            tabIndex={0}
-          >
-            <img src={imagePreview} alt="Aperçu" className="max-h-48 rounded-xl border border-slate-200 object-contain" />
-            <button
-              onClick={removeImage}
-              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+          <div className="space-y-3">
+            {/* Conteneur image — cliquable en mode QZONE pour placer le hotspot */}
+            <div
+              ref={hotspotContainerRef}
+              className={`relative w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-50 ${type === 'QZONE' ? 'cursor-crosshair' : ''}`}
+              onClick={type === 'QZONE' ? handleHotspotClick : undefined}
+              onPaste={handlePaste}
+              tabIndex={0}
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+              <img
+                src={imagePreview}
+                alt="Aperçu"
+                className="w-full object-contain max-h-72"
+                onLoad={() => {
+                  const el = hotspotContainerRef.current;
+                  if (el) setHotspotAR(el.offsetWidth / el.offsetHeight);
+                }}
+              />
+              {/* Cercle hotspot */}
+              {type === 'QZONE' && hotspot && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${hotspot.x}%`,
+                    top: `${hotspot.y / hotspotAR}%`,
+                    width: `${hotspot.radius * 2}%`,
+                    height: 0,
+                    paddingBottom: `${hotspot.radius * 2}%`,
+                    transform: 'translate(-50%, -50%)',
+                    borderRadius: '50%',
+                    border: '2.5px solid #14b8a6',
+                    background: 'rgba(20,184,166,0.15)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {/* Hint QZONE */}
+              {type === 'QZONE' && !hotspot && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="bg-teal-600/80 text-white text-xs px-3 py-1.5 rounded-full">
+                    Cliquez pour placer la zone de réponse
+                  </span>
+                </div>
+              )}
+              {/* Bouton supprimer image */}
+              {type !== 'QZONE' && (
+                <button
+                  onClick={removeImage}
+                  className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Contrôles QZONE */}
+            {type === 'QZONE' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-slate-500 shrink-0">Rayon de la zone</label>
+                  <input
+                    type="range" min={3} max={25} step={0.5}
+                    value={hotspot?.radius ?? 8}
+                    onChange={e => setHotspot(prev => prev ? { ...prev, radius: parseFloat(e.target.value) } : prev)}
+                    className="flex-1 accent-teal-500"
+                    disabled={!hotspot}
+                  />
+                  <span className="text-xs text-slate-400 w-10 text-right">{hotspot ? `${hotspot.radius.toFixed(1)}%` : '—'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  {hotspot ? (
+                    <span className="text-xs text-teal-600 font-medium flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      Zone définie — recliquez pour repositionner
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">Zone non définie</span>
+                  )}
+                  {hotspot && (
+                    <button onClick={() => setHotspot(null)} className="text-xs text-red-400 hover:text-red-600 transition-colors">
+                      Effacer la zone
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={removeImage}
+                  className="text-xs text-slate-400 hover:text-slate-600 transition-colors underline"
+                >
+                  Changer d'image
+                </button>
+              </div>
+            )}
+
+            {/* Bouton supprimer image (hors QZONE) */}
+            {type !== 'QZONE' && (
+              <button
+                onClick={removeImage}
+                className="text-xs text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                Supprimer l'image
+              </button>
+            )}
           </div>
         ) : (
           <div
@@ -433,12 +543,14 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-700">Import rapide</h3>
           <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-            {(['QCM', 'QRU'] as const).map(t => (
+            {(['QCM', 'QRU', 'QZONE'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => { setType(t); if (t === 'QRU' && reponses.length > 1) setReponses([reponses[0]]); }}
                 className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  type === t ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  type === t
+                    ? t === 'QZONE' ? 'bg-white text-teal-700 shadow-sm' : 'bg-white text-blue-700 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 {t}
@@ -477,8 +589,8 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
         />
       </div>
 
-      {/* ── Items ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+      {/* ── Items (masqué pour QZONE) ── */}
+      {type !== 'QZONE' && <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-700">Items de réponse</h3>
           <div className="flex items-center gap-2">
@@ -510,10 +622,10 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
-      {/* ── Réponses correctes ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+      {/* ── Réponses correctes (masqué pour QZONE) ── */}
+      {type !== 'QZONE' && <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">
           Réponses correctes *
           {type === 'QRU' && <span className="ml-1 font-normal text-slate-400">(une seule)</span>}
@@ -528,7 +640,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* ── Prévisualisation ── */}
       {showPreview && (

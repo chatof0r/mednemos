@@ -4,6 +4,13 @@ export interface Item {
   justification: string;
 }
 
+// Coordonnées en % de la largeur du conteneur (système uniforme)
+export interface Hotspot {
+  x: number;      // centre x (% de la largeur du conteneur)
+  y: number;      // centre y (% de la largeur du conteneur — même unité que x)
+  radius: number; // rayon (% de la largeur du conteneur)
+}
+
 export interface Question {
   id: string;
   created_at: string;
@@ -12,11 +19,12 @@ export interface Question {
   cours: string[] | null;
   annee: number | null;
   session: 1 | 2 | null;
-  type: 'QCM' | 'QRU';
+  type: 'QCM' | 'QRU' | 'QZONE';
   enonce: string;
   image_url: string | null;
   items: Item[];
   reponses: string[];
+  hotspot: Hotspot | null;
   statut: 'brouillon' | 'publiee';
   numero_officiel: number | null;
 }

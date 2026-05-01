@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Question, Item, SessionConfig } from '../types';
@@ -24,7 +24,20 @@ function getItemState(label: string, selected: string[], reponses: string[], val
   return 'incorrect-missed';
 }
 
+function zoneHit(q: Question, sel: string[]): boolean | null {
+  if (q.type !== 'QZONE' || !q.hotspot || sel.length === 0) return null;
+  const [x, y] = sel[0].split(',').map(Number);
+  const dx = x - q.hotspot.x;
+  const dy = y - q.hotspot.y;
+  return Math.sqrt(dx * dx + dy * dy) <= q.hotspot.radius;
+}
+
 function scoreForQuestion(q: Question, sel: string[]): number {
+  if (q.type === 'QZONE') {
+    const hit = zoneHit(q, sel);
+    if (hit === null) return 0;    // pas de réponse
+    return hit ? 1 : -1;          // correct ou malus
+  }
   const errors = q.items.filter(i => {
     const isCorrect = q.reponses.includes(i.label);
     const isSelected = sel.includes(i.label);
@@ -70,6 +83,8 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
   const [remarkSent, setRemarkSent] = useState(false);
   const [showRemark, setShowRemark] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [zoneAR, setZoneAR] = useState(1);
+  const zoneContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (validated) {
@@ -96,6 +111,24 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
     });
   };
 
+  // QZONE — clic sur l'image
+  const handleZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (validated) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setZoneAR(rect.width / rect.height);
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.width) * 100; // % de la largeur
+    onToggle(`${x.toFixed(2)},${y.toFixed(2)}`);
+  };
+
+  const zoneClick = question.type === 'QZONE' && selected.length > 0
+    ? (() => { const [x, y] = selected[0].split(',').map(Number); return { x, y }; })()
+    : null;
+
+  const zoneCorrect = question.type === 'QZONE' && validated
+    ? zoneHit(question, selected)
+    : null;
+
   const sendRemark = async () => {
     if (!remarkText.trim()) return;
     const ref = question.numero_officiel
@@ -117,7 +150,9 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
           question.type === 'QCM'
             ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400'
-            : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
+            : question.type === 'QZONE'
+              ? 'bg-teal-100 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400'
+              : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
         }`}>{question.type}</span>
       </div>
 
@@ -127,16 +162,113 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
           style={{ width: `${((index + 1) / total) * 100}%` }} />
       </div>
 
-      {/* Image */}
-      {question.image_url && (
-        <img src={question.image_url} alt="Illustration" className="w-full max-h-64 object-contain rounded-xl mb-4 bg-slate-50 dark:bg-white/5" />
+      {/* Énoncé */}
+      <p className="text-slate-800 dark:text-white font-medium leading-relaxed mb-4 whitespace-pre-wrap">{question.enonce}</p>
+
+      {/* ── QZONE : image cliquable ── */}
+      {question.type === 'QZONE' ? (
+        <div className="mb-6">
+          <div
+            ref={zoneContainerRef}
+            className={`relative w-full rounded-xl overflow-hidden bg-slate-50 dark:bg-white/5 ${!validated ? 'cursor-crosshair' : ''}`}
+            onClick={!validated ? handleZoneClick : undefined}
+            onLoad={() => {
+              const el = zoneContainerRef.current;
+              if (el) setZoneAR(el.offsetWidth / el.offsetHeight);
+            }}
+          >
+            <img
+              src={question.image_url ?? ''}
+              alt="Zone à identifier"
+              className="w-full object-contain"
+              onLoad={() => {
+                const el = zoneContainerRef.current;
+                if (el) setZoneAR(el.offsetWidth / el.offsetHeight);
+              }}
+            />
+
+            {/* Cercle correct (affiché après validation) */}
+            {validated && question.hotspot && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${question.hotspot.x}%`,
+                  top: `${question.hotspot.y / zoneAR}%`,
+                  width: `${question.hotspot.radius * 2}%`,
+                  height: 0,
+                  paddingBottom: `${question.hotspot.radius * 2}%`,
+                  transform: 'translate(-50%, -50%)',
+                  borderRadius: '50%',
+                  border: `2.5px solid ${zoneCorrect ? '#22c55e' : '#22c55e'}`,
+                  background: zoneCorrect ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.10)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+
+            {/* Point du clic étudiant */}
+            {zoneClick && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${zoneClick.x}%`,
+                  top: `${zoneClick.y / zoneAR}%`,
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none',
+                }}
+                className={`w-4 h-4 rounded-full border-2 border-white shadow-md ${
+                  !validated ? 'bg-[#e3fe52]'
+                    : zoneCorrect ? 'bg-green-500'
+                      : 'bg-red-500'
+                }`}
+              />
+            )}
+
+            {/* Hint avant clic */}
+            {!validated && !zoneClick && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="bg-black/50 dark:bg-black/70 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm">
+                  Cliquez sur l'image pour répondre
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Feedback après validation */}
+          {validated && (
+            <div className={`mt-3 flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-xl ${
+              zoneCorrect
+                ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400'
+                : zoneCorrect === false
+                  ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
+                  : 'bg-slate-50 dark:bg-white/5 text-slate-500'
+            }`}>
+              {zoneCorrect === null
+                ? 'Pas de réponse — 0 pt'
+                : zoneCorrect
+                  ? '✓ Bonne zone — +1 pt'
+                  : '✗ Mauvaise zone — −1 pt (malus)'}
+            </div>
+          )}
+
+          {/* Invite à re-cliquer avant validation */}
+          {!validated && zoneClick && (
+            <p className="mt-2 text-xs text-slate-400 dark:text-white/30 text-center">
+              Recliquez pour changer votre réponse
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Image classique (non-QZONE) */}
+          {question.image_url && (
+            <img src={question.image_url} alt="Illustration" className="w-full max-h-64 object-contain rounded-xl mb-4 bg-slate-50 dark:bg-white/5" />
+          )}
+        </>
       )}
 
-      {/* Énoncé */}
-      <p className="text-slate-800 dark:text-white font-medium leading-relaxed mb-6 whitespace-pre-wrap">{question.enonce}</p>
-
-      {/* Items */}
-      <div className="space-y-2">
+      {/* Items (QCM / QRU uniquement) */}
+      {question.type !== 'QZONE' && <div className="space-y-2">
         {question.items.map((item: Item) => {
           const state = getItemState(item.label, selected, question.reponses, validated);
           const isSelected = selected.includes(item.label);
@@ -232,7 +364,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {/* Actions */}
       <div className="mt-6 flex flex-col gap-3">
@@ -306,7 +438,7 @@ interface ResultsProps {
 function Results({ questions, answers, onRestart }: ResultsProps) {
   const totalScore = questions.reduce((sum, q) => sum + scoreForQuestion(q, answers[q.id] ?? []), 0);
   const displayScore = totalScore % 1 === 0 ? String(totalScore) : totalScore.toFixed(1);
-  const pct = Math.round((totalScore / questions.length) * 100);
+  const pct = Math.max(0, Math.round((totalScore / questions.length) * 100));
   const color = pct >= 70 ? 'text-green-500' : pct >= 50 ? 'text-orange-400' : 'text-red-400';
   const barColor = pct >= 70 ? 'bg-green-500' : pct >= 50 ? 'bg-orange-400' : 'bg-red-400';
 
@@ -352,40 +484,68 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        q.type === 'QCM' ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400' : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
+                        q.type === 'QCM' ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400'
+                          : q.type === 'QZONE' ? 'bg-teal-100 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400'
+                            : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
                       }`}>{q.type}</span>
                       <span className="text-xs text-slate-400 dark:text-white/30">{q.matiere}{q.annee ? ` · ${q.annee}` : ''}</span>
                     </div>
-                    <span className={`text-sm font-bold ${pts === 0.5 ? 'text-orange-400' : 'text-red-400'}`}>
-                      {pts % 1 === 0 ? pts : pts.toFixed(1)} pt
+                    <span className={`text-sm font-bold ${pts >= 0 && pts < 1 ? 'text-orange-400' : 'text-red-400'}`}>
+                      {pts > 0 ? `+${pts}` : pts} pt
                     </span>
                   </div>
-                  {q.image_url && <img src={q.image_url} alt="" className="w-full max-h-48 object-contain rounded-lg mb-3 bg-slate-50 dark:bg-white/5" />}
                   <p className="text-sm font-medium text-slate-800 dark:text-white mb-3 whitespace-pre-wrap">{q.enonce}</p>
-                  <div className="space-y-2">
-                    {errorItems.map(item => {
-                      const s = getItemState(item.label, sel, q.reponses, true);
-                      return (
-                        <div key={item.label} className={`p-2.5 rounded-lg text-xs ${
-                          s === 'incorrect-checked'
-                            ? 'bg-red-50/80 dark:bg-red-500/10 text-red-700 dark:text-red-400'
-                            : 'bg-green-100/80 dark:bg-green-500/10 text-green-800 dark:text-green-300'
-                        }`}>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            {s === 'incorrect-checked'
-                              ? <XIcon className="w-3 h-3 shrink-0" />
-                              : <XIcon className="w-3 h-3 shrink-0" />
-                            }
-                            <span className="font-bold">{item.label}.</span>
-                            <span>{item.enonce}</span>
-                          </div>
-                          {item.justification && (
-                            <p className="italic opacity-70 pl-4">{item.justification}</p>
-                          )}
+                  {q.type === 'QZONE' ? (
+                    /* Recap QZONE : image avec zone correcte */
+                    q.image_url && (
+                      <div className="relative w-full rounded-lg overflow-hidden bg-slate-50 dark:bg-white/5">
+                        <img src={q.image_url} alt="" className="w-full object-contain" />
+                        {q.hotspot && (
+                          <div style={{
+                            position: 'absolute',
+                            left: `${q.hotspot.x}%`,
+                            top: `${q.hotspot.y}%`,
+                            width: `${q.hotspot.radius * 2}%`,
+                            height: 0,
+                            paddingBottom: `${q.hotspot.radius * 2}%`,
+                            transform: 'translate(-50%, -50%)',
+                            borderRadius: '50%',
+                            border: '2.5px solid #22c55e',
+                            background: 'rgba(34,197,94,0.15)',
+                            pointerEvents: 'none',
+                          }} />
+                        )}
+                        <div className="absolute bottom-2 left-2">
+                          <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full">Zone correcte</span>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      {q.image_url && <img src={q.image_url} alt="" className="w-full max-h-48 object-contain rounded-lg mb-3 bg-slate-50 dark:bg-white/5" />}
+                      <div className="space-y-2">
+                        {errorItems.map(item => {
+                          const s = getItemState(item.label, sel, q.reponses, true);
+                          return (
+                            <div key={item.label} className={`p-2.5 rounded-lg text-xs ${
+                              s === 'incorrect-checked'
+                                ? 'bg-red-50/80 dark:bg-red-500/10 text-red-700 dark:text-red-400'
+                                : 'bg-green-100/80 dark:bg-green-500/10 text-green-800 dark:text-green-300'
+                            }`}>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <XIcon className="w-3 h-3 shrink-0" />
+                                <span className="font-bold">{item.label}.</span>
+                                <span>{item.enonce}</span>
+                              </div>
+                              {item.justification && (
+                                <p className="italic opacity-70 pl-4">{item.justification}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -424,6 +584,7 @@ export default function Session() {
   const handleToggle = (label: string) => {
     setAnswers(prev => {
       const sel = prev[q.id] ?? [];
+      if (q.type === 'QZONE') return { ...prev, [q.id]: [label] }; // remplace le clic
       if (q.type === 'QRU') return { ...prev, [q.id]: sel.includes(label) ? [] : [label] };
       return { ...prev, [q.id]: sel.includes(label) ? sel.filter(l => l !== label) : [...sel, label] };
     });
