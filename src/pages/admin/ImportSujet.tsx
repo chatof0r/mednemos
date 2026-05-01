@@ -19,14 +19,33 @@ interface ParsedQuestion {
 // ---------------------------------------------------------------------------
 
 function parseSubject(raw: string): ParsedQuestion[] {
-  const lines = raw.split('\n').map(l => l.trim());
+  // ── Pre-normalisation ─────────────────────────────────────────────────────
+  // Insert a newline before every inline item marker so "...text. A. item B. item"
+  // becomes "...text.\nA. item\nB. item" before line-by-line parsing.
+  //
+  // Rule (per user spec): any [A-E] immediately followed by ". " is a new item,
+  // whether it's already on its own line or embedded inline after other text.
+  //
+  // Strategy: replace any run of spaces/tabs that precedes "[A-E]. " with a newline.
+  // "talus. A. text" → "talus.\nA. text"
+  // "pied : A. text" → "pied :\nA. text"
+  // Already at start of line (no leading spaces): left untouched.
+  const normalized = raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    // " A. " / " B. " etc. → "\nA. " / "\nB. " etc.
+    .replace(/[ \t]+([A-E])\. /g, '\n$1. ')
+    // Edge-case: ".A. " with no space → ".\nA. "
+    .replace(/\.([A-E])\. /g, '.\n$1. ');
+
+  const lines = normalized.split('\n').map(l => l.trim());
 
   // Question with explicit type prefix: "QCM n°1 : ..." / "QRU 2 : ..."
   const Q_TYPED = /^(QCM|QRU)\s*(?:n[°o]?\s*)?(\d+)\s*[:.)]?\s*(.*)/i;
   // Plain numbered question: "n°1 : ..." / "1. ..." / "1) ..."
   const Q_NUM = /^(?:n[°o]\s*)?(\d+)\s*[:.]\s*(.*)/i;
-  // Item line: "A. ..." / "A) ..." / "A - ..." / "A : ..."
-  const ITEM_RE = /^([A-E])\s*[.):–—-]\s*(.*)/;
+  // Item line: "[A-E]. " (period specifically, per user spec)
+  const ITEM_RE = /^([A-E])\. (.*)/;
 
   const questions: ParsedQuestion[] = [];
   let cur: ParsedQuestion | null = null;
