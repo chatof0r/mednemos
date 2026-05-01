@@ -4,11 +4,14 @@ export interface Item {
   justification: string;
 }
 
+export interface HotspotPoint {
+  x: number; // % de la largeur du conteneur
+  y: number; // % de la hauteur du conteneur
+}
+
 export interface Hotspot {
-  x: number;      // centre x  (% de la largeur du conteneur)
-  y: number;      // centre y  (% de la HAUTEUR du conteneur)
-  radius: number; // rayon     (% de la largeur du conteneur)
-  ar: number;     // width/height du conteneur au moment de la création
+  points: HotspotPoint[]; // sommets du polygone (≥ 3)
+  ar: number;             // width/height du conteneur au moment de la création
 }
 
 export interface Question {

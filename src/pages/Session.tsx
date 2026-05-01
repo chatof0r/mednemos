@@ -24,14 +24,24 @@ function getItemState(label: string, selected: string[], reponses: string[], val
   return 'incorrect-missed';
 }
 
+// Point-in-polygon (ray casting) — coordonnées normalisées en % de largeur
+function pointInPolygon(px: number, py: number, points: Array<{x: number, y: number}>, ar: number): boolean {
+  const nx = px;
+  const ny = py / ar; // convertit % hauteur → % largeur pour un espace uniforme
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x, yi = points[i].y / ar;
+    const xj = points[j].x, yj = points[j].y / ar;
+    if (((yi > ny) !== (yj > ny)) && (nx < (xj - xi) * (ny - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
 function zoneHit(q: Question, sel: string[]): boolean | null {
   if (q.type !== 'QZONE' || !q.hotspot || sel.length === 0) return null;
   const [cx, cy] = sel[0].split(',').map(Number);
-  const ar = q.hotspot.ar || 1;
-  // dx en % de largeur, dy converti en même unité via ar
-  const dx = cx - q.hotspot.x;
-  const dy = (cy - q.hotspot.y) / ar;
-  return Math.sqrt(dx * dx + dy * dy) <= q.hotspot.radius;
+  return pointInPolygon(cx, cy, q.hotspot.points, q.hotspot.ar || 1);
 }
 
 function scoreForQuestion(q: Question, sel: string[]): number {
@@ -89,7 +99,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
   const [remarkSent, setRemarkSent] = useState(false);
   const [showRemark, setShowRemark] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  const [zonePxW, setZonePxW] = useState(0);
+  const [, setZonePxW] = useState(0);
   const zoneContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -193,22 +203,21 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
               }}
             />
 
-            {/* Cercle correct (affiché après validation) — rayon en px */}
-            {validated && question.hotspot && zonePxW > 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${question.hotspot.x}%`,
-                  top: `${question.hotspot.y}%`,
-                  width: `${question.hotspot.radius / 100 * zonePxW * 2}px`,
-                  height: `${question.hotspot.radius / 100 * zonePxW * 2}px`,
-                  transform: 'translate(-50%, -50%)',
-                  borderRadius: '50%',
-                  border: '2.5px solid #22c55e',
-                  background: 'rgba(34,197,94,0.15)',
-                  pointerEvents: 'none',
-                }}
-              />
+            {/* Polygone correct (affiché après validation) */}
+            {validated && question.hotspot && (
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                <polygon
+                  points={question.hotspot.points.map(p => `${p.x},${p.y}`).join(' ')}
+                  fill="rgba(34,197,94,0.2)"
+                  stroke="#22c55e"
+                  strokeWidth="0.6"
+                  strokeLinejoin="round"
+                />
+              </svg>
             )}
 
             {/* Point du clic étudiant */}
@@ -506,19 +515,19 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
                       <div className="relative w-full rounded-lg overflow-hidden bg-slate-50 dark:bg-white/5">
                         <img src={q.image_url} alt="" className="w-full object-contain" />
                         {q.hotspot && (
-                          <div style={{
-                            position: 'absolute',
-                            left: `${q.hotspot.x}%`,
-                            top: `${q.hotspot.y}%`,
-                            width: `${q.hotspot.radius * 2}%`,
-                            height: 0,
-                            paddingBottom: `${q.hotspot.radius * 2}%`,
-                            transform: 'translate(-50%, -50%)',
-                            borderRadius: '50%',
-                            border: '2.5px solid #22c55e',
-                            background: 'rgba(34,197,94,0.15)',
-                            pointerEvents: 'none',
-                          }} />
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                          >
+                            <polygon
+                              points={q.hotspot.points.map(p => `${p.x},${p.y}`).join(' ')}
+                              fill="rgba(34,197,94,0.2)"
+                              stroke="#22c55e"
+                              strokeWidth="0.7"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
                         )}
                         <div className="absolute bottom-2 left-2">
                           <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-full">Zone correcte</span>

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Question, Item, Hotspot } from '../../types';
+import { Question, Item, Hotspot, HotspotPoint } from '../../types';
 import { CURRICULUM, COURSES, ANNEES, getAllMatieres } from '../../lib/curriculum';
 import QuestionPreview from './QuestionPreview';
 
@@ -26,13 +26,10 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
   const [type, setType] = useState<'QCM' | 'QRU' | 'QZONE'>(seed?.type ?? 'QCM');
   const [hotspot, setHotspot] = useState<Hotspot | null>(initial?.hotspot ?? null);
-  const [containerPxW, setContainerPxW] = useState(0); // largeur en px du conteneur image
+  const [drawing, setDrawing] = useState<HotspotPoint[]>([]); // sommets en cours de dessin
   const hotspotContainerRef = useRef<HTMLDivElement>(null);
 
-  const measureContainer = () => {
-    const el = hotspotContainerRef.current;
-    if (el) setContainerPxW(el.offsetWidth);
-  };
+  const CLOSE_THRESHOLD_PX = 14; // distance en px pour fermer le polygone
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
   const [items, setItems] = useState<Item[]>(initial?.items ?? defaultItems());
   const [reponses, setReponses] = useState<string[]>(initial?.reponses ?? []);
@@ -166,15 +163,28 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     statut,
   });
 
-  // Handler clic sur l'image pour définir le centre du hotspot
+  // Handler clic pour dessiner le polygone
   const handleHotspotClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (hotspot) return; // déjà fermé
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width * 100;   // % largeur
-    const y = (e.clientY - rect.top)  / rect.height * 100;  // % hauteur
-    const ar = rect.width / rect.height;
-    setContainerPxW(rect.width);
-    setHotspot(prev => ({ x, y, radius: prev?.radius ?? 8, ar }));
-  }, []);
+    const x = (e.clientX - rect.left) / rect.width  * 100;
+    const y = (e.clientY - rect.top)  / rect.height * 100;
+
+    setDrawing(prev => {
+      // Fermeture si clic proche du premier sommet (et ≥ 3 points)
+      if (prev.length >= 3) {
+        const fp = prev[0];
+        const fpPx = { x: fp.x / 100 * rect.width, y: fp.y / 100 * rect.height };
+        const clickPx = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const dist = Math.hypot(clickPx.x - fpPx.x, clickPx.y - fpPx.y);
+        if (dist <= CLOSE_THRESHOLD_PX) {
+          setHotspot({ points: prev, ar: rect.width / rect.height });
+          return [];
+        }
+      }
+      return [...prev, { x, y }];
+    });
+  }, [hotspot]);
 
   const validate = () => {
     if (!matiere) return 'Sélectionnez une matière.';
@@ -183,7 +193,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     if (!enonce.trim()) return "L'énoncé est requis.";
     if (type === 'QZONE') {
       if (!imagePreview) return 'Une image est requise pour une question QZONE.';
-      if (!hotspot) return "Cliquez sur l'image pour définir la zone de réponse.";
+      if (!hotspot) return 'Dessinez la zone de réponse sur l\'image (minimum 3 points, cliquez le premier pour fermer).';
       return null;
     }
     if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
@@ -424,30 +434,67 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
                 src={imagePreview}
                 alt="Aperçu"
                 className="w-full block"
-                onLoad={measureContainer}
               />
-              {/* Cercle hotspot — rayon en px pour un vrai cercle */}
-              {type === 'QZONE' && hotspot && containerPxW > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: `${hotspot.x}%`,
-                    top: `${hotspot.y}%`,
-                    width: `${hotspot.radius / 100 * containerPxW * 2}px`,
-                    height: `${hotspot.radius / 100 * containerPxW * 2}px`,
-                    transform: 'translate(-50%, -50%)',
-                    borderRadius: '50%',
-                    border: '2.5px solid #14b8a6',
-                    background: 'rgba(20,184,166,0.15)',
-                    pointerEvents: 'none',
-                  }}
-                />
+              {/* Overlay SVG polygone */}
+              {type === 'QZONE' && (drawing.length > 0 || hotspot) && (
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  {/* Polygone fermé */}
+                  {hotspot && (
+                    <polygon
+                      points={hotspot.points.map(p => `${p.x},${p.y}`).join(' ')}
+                      fill="rgba(20,184,166,0.2)"
+                      stroke="#14b8a6"
+                      strokeWidth="0.6"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                  {/* Lignes en cours de dessin */}
+                  {!hotspot && drawing.length > 1 && (
+                    <polyline
+                      points={drawing.map(p => `${p.x},${p.y}`).join(' ')}
+                      fill="none"
+                      stroke="#14b8a6"
+                      strokeWidth="0.6"
+                      strokeLinejoin="round"
+                      strokeDasharray="2 1"
+                    />
+                  )}
+                  {/* Sommets */}
+                  {(hotspot ? hotspot.points : drawing).map((p, i) => (
+                    <circle
+                      key={i}
+                      cx={p.x} cy={p.y}
+                      r={i === 0 && !hotspot ? '2' : '1'}
+                      fill={i === 0 && !hotspot ? '#14b8a6' : 'white'}
+                      stroke="#14b8a6"
+                      strokeWidth="0.5"
+                    />
+                  ))}
+                </svg>
               )}
               {/* Hint QZONE */}
-              {type === 'QZONE' && !hotspot && (
+              {type === 'QZONE' && !hotspot && drawing.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <span className="bg-teal-600/80 text-white text-xs px-3 py-1.5 rounded-full">
-                    Cliquez pour placer la zone de réponse
+                    Cliquez pour poser le premier sommet
+                  </span>
+                </div>
+              )}
+              {type === 'QZONE' && !hotspot && drawing.length > 0 && drawing.length < 3 && (
+                <div className="absolute bottom-2 left-2 pointer-events-none">
+                  <span className="bg-black/60 text-white text-xs px-2.5 py-1 rounded-full">
+                    {drawing.length} point{drawing.length > 1 ? 's' : ''} — encore {3 - drawing.length} minimum
+                  </span>
+                </div>
+              )}
+              {type === 'QZONE' && !hotspot && drawing.length >= 3 && (
+                <div className="absolute bottom-2 left-2 pointer-events-none">
+                  <span className="bg-teal-600/80 text-white text-xs px-2.5 py-1 rounded-full">
+                    {drawing.length} points — cliquez le •premier point• pour fermer
                   </span>
                 </div>
               )}
@@ -466,39 +513,33 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
 
             {/* Contrôles QZONE */}
             {type === 'QZONE' && (
-              <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                {hotspot ? (
+                  <span className="text-xs text-teal-600 font-medium flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    Zone fermée ({hotspot.points.length} sommets)
+                  </span>
+                ) : drawing.length > 0 ? (
+                  <span className="text-xs text-slate-500">{drawing.length} point{drawing.length > 1 ? 's' : ''} placé{drawing.length > 1 ? 's' : ''}</span>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">Cliquez sur l'image pour dessiner la zone</span>
+                )}
                 <div className="flex items-center gap-3">
-                  <label className="text-xs text-slate-500 shrink-0">Rayon de la zone</label>
-                  <input
-                    type="range" min={3} max={25} step={0.5}
-                    value={hotspot?.radius ?? 8}
-                    onChange={e => setHotspot(prev => prev ? { ...prev, radius: parseFloat(e.target.value) } : prev)}
-                    className="flex-1 accent-teal-500"
-                    disabled={!hotspot}
-                  />
-                  <span className="text-xs text-slate-400 w-10 text-right">{hotspot ? `${hotspot.radius.toFixed(1)}%` : '—'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  {hotspot ? (
-                    <span className="text-xs text-teal-600 font-medium flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      Zone définie — recliquez pour repositionner
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-400 italic">Zone non définie</span>
-                  )}
-                  {hotspot && (
-                    <button onClick={() => setHotspot(null)} className="text-xs text-red-400 hover:text-red-600 transition-colors">
-                      Effacer la zone
+                  {(hotspot || drawing.length > 0) && (
+                    <button
+                      onClick={() => { setHotspot(null); setDrawing([]); }}
+                      className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      Recommencer
                     </button>
                   )}
+                  <button
+                    onClick={removeImage}
+                    className="text-xs text-slate-400 hover:text-slate-600 transition-colors underline"
+                  >
+                    Changer d'image
+                  </button>
                 </div>
-                <button
-                  onClick={removeImage}
-                  className="text-xs text-slate-400 hover:text-slate-600 transition-colors underline"
-                >
-                  Changer d'image
-                </button>
               </div>
             )}
 
