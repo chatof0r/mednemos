@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Question } from '../../types';
 import QuestionForm from './QuestionForm';
+import ImportSujet from './ImportSujet';
 
-type View = 'list' | 'create' | 'edit';
+type View = 'list' | 'create' | 'edit' | 'import';
 
 export default function AdminQuestions() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -12,6 +13,7 @@ export default function AdminQuestions() {
   const [editing, setEditing] = useState<Question | null>(null);
   const [lastSaved, setLastSaved] = useState<Question | null>(null);
   const [prefill, setPrefill] = useState<Partial<Question> | null>(null);
+  const [importCount, setImportCount] = useState<number | null>(null);
 
   // Filters
   const [filterNiveau, setFilterNiveau] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export default function AdminQuestions() {
 
   const handleSaved = (q: Question) => {
     setLastSaved(q);
+    setImportCount(null);
     setView('list');
     setEditing(null);
     setPrefill(null);
@@ -95,6 +98,21 @@ export default function AdminQuestions() {
     return true;
   });
 
+  if (view === 'import') {
+    return (
+      <ImportSujet
+        onDone={(count) => {
+          setLastSaved(null);
+          setView('list');
+          load();
+          // Show a transient success message via a dedicated state
+          setImportCount(count);
+        }}
+        onCancel={() => setView('list')}
+      />
+    );
+  }
+
   if (view === 'create' || view === 'edit') {
     return (
       <div>
@@ -130,16 +148,42 @@ export default function AdminQuestions() {
             ({filtered.length}{filtered.length !== questions.length ? `/${questions.length}` : ''})
           </span>
         </h2>
-        <button
-          onClick={startCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nouvelle question
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setLastSaved(null); setImportCount(null); setView('import'); }}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-200 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Import de sujet
+          </button>
+          <button
+            onClick={startCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nouvelle question
+          </button>
+        </div>
       </div>
+
+      {/* Import success banner */}
+      {importCount !== null && (
+        <div className="mb-4 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <span className="text-sm text-blue-700">
+            <strong>{importCount}</strong> question{importCount > 1 ? 's' : ''} importée{importCount > 1 ? 's' : ''} en brouillon — complétez cours et réponses une par une
+          </span>
+          <button
+            onClick={() => { setImportCount(null); setFilterStatut('brouillon'); }}
+            className="text-sm font-medium text-blue-700 hover:text-blue-900 transition-colors underline underline-offset-2 ml-4 shrink-0"
+          >
+            Voir les brouillons →
+          </button>
+        </div>
+      )}
 
       {/* Success banner */}
       {lastSaved && (
