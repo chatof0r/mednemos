@@ -263,9 +263,10 @@ export default function AdminQuestions() {
                 const yearKey = q.annee ?? null;
                 const prevYearKey = idx > 0 ? (filtered[idx - 1].annee ?? null) : yearKey;
                 const showSeparator = idx > 0 && yearKey !== prevYearKey;
+                const shortYear = q.annee ? String(q.annee).slice(-2) : '?';
                 const ref = q.numero_officiel
-                  ? `Q${q.numero_officiel} / ${q.annee ?? '?'}${q.session ? `.${q.session}` : ''}`
-                  : q.annee ? `${q.annee}${q.session ? `.${q.session}` : ''}` : '—';
+                  ? `Q${q.numero_officiel} / ${shortYear}${q.session ? `.${q.session}` : ''}`
+                  : q.annee ? `${shortYear}${q.session ? `.${q.session}` : ''}` : '—';
                 return (
                   <>
                     {showSeparator && (
