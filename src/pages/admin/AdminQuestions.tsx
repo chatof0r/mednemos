@@ -261,8 +261,8 @@ export default function AdminQuestions() {
             <tbody>
               {filtered.map((q, idx) => {
                 const yearKey = q.annee ?? null;
-                const prevYearKey = idx > 0 ? (filtered[idx - 1].annee ?? null) : yearKey;
-                const showSeparator = idx > 0 && yearKey !== prevYearKey;
+                const prevYearKey = idx > 0 ? (filtered[idx - 1].annee ?? null) : null;
+                const showSeparator = idx === 0 || yearKey !== prevYearKey;
                 const shortYear = q.annee ? String(q.annee).slice(-2) : '?';
                 const ref = q.numero_officiel
                   ? `Q${q.numero_officiel} / ${shortYear}${q.session ? `.${q.session}` : ''}`
@@ -271,10 +271,10 @@ export default function AdminQuestions() {
                   <>
                     {showSeparator && (
                       <tr key={`sep-${q.id}`}>
-                        <td colSpan={7} className="pt-5 pb-1">
+                        <td colSpan={7} className={idx === 0 ? 'pb-1' : 'pt-5 pb-1'}>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-semibold text-slate-400 tracking-wide uppercase whitespace-nowrap">
-                              {prevYearKey ?? '—'}
+                              {yearKey ?? '—'}
                             </span>
                             <div className="flex-1 h-px bg-slate-100" />
                           </div>
