@@ -4,11 +4,11 @@ export interface Item {
   justification: string;
 }
 
-// Coordonnées en % de la largeur du conteneur (système uniforme)
 export interface Hotspot {
-  x: number;      // centre x (% de la largeur du conteneur)
-  y: number;      // centre y (% de la largeur du conteneur — même unité que x)
-  radius: number; // rayon (% de la largeur du conteneur)
+  x: number;      // centre x  (% de la largeur du conteneur)
+  y: number;      // centre y  (% de la HAUTEUR du conteneur)
+  radius: number; // rayon     (% de la largeur du conteneur)
+  ar: number;     // width/height du conteneur au moment de la création
 }
 
 export interface Question {

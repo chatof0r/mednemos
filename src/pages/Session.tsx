@@ -26,9 +26,11 @@ function getItemState(label: string, selected: string[], reponses: string[], val
 
 function zoneHit(q: Question, sel: string[]): boolean | null {
   if (q.type !== 'QZONE' || !q.hotspot || sel.length === 0) return null;
-  const [x, y] = sel[0].split(',').map(Number);
-  const dx = x - q.hotspot.x;
-  const dy = y - q.hotspot.y;
+  const [cx, cy] = sel[0].split(',').map(Number);
+  const ar = q.hotspot.ar || 1;
+  // dx en % de largeur, dy converti en même unité via ar
+  const dx = cx - q.hotspot.x;
+  const dy = (cy - q.hotspot.y) / ar;
   return Math.sqrt(dx * dx + dy * dy) <= q.hotspot.radius;
 }
 
@@ -87,7 +89,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
   const [remarkSent, setRemarkSent] = useState(false);
   const [showRemark, setShowRemark] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  const [zoneAR, setZoneAR] = useState(1);
+  const [zonePxW, setZonePxW] = useState(0);
   const zoneContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -119,9 +121,9 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
   const handleZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (validated) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    setZoneAR(rect.width / rect.height);
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.width) * 100; // % de la largeur
+    setZonePxW(rect.width);
+    const x = (e.clientX - rect.left) / rect.width * 100;   // % largeur
+    const y = (e.clientY - rect.top)  / rect.height * 100;  // % hauteur
     onToggle(`${x.toFixed(2)},${y.toFixed(2)}`);
   };
 
@@ -178,7 +180,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             onClick={!validated ? handleZoneClick : undefined}
             onLoad={() => {
               const el = zoneContainerRef.current;
-              if (el) setZoneAR(el.offsetWidth / el.offsetHeight);
+              if (el) setZonePxW(el.offsetWidth);
             }}
           >
             <img
@@ -187,24 +189,23 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
               className="w-full object-contain"
               onLoad={() => {
                 const el = zoneContainerRef.current;
-                if (el) setZoneAR(el.offsetWidth / el.offsetHeight);
+                if (el) setZonePxW(el.offsetWidth);
               }}
             />
 
-            {/* Cercle correct (affiché après validation) */}
-            {validated && question.hotspot && (
+            {/* Cercle correct (affiché après validation) — rayon en px */}
+            {validated && question.hotspot && zonePxW > 0 && (
               <div
                 style={{
                   position: 'absolute',
                   left: `${question.hotspot.x}%`,
-                  top: `${question.hotspot.y / zoneAR}%`,
-                  width: `${question.hotspot.radius * 2}%`,
-                  height: 0,
-                  paddingBottom: `${question.hotspot.radius * 2}%`,
+                  top: `${question.hotspot.y}%`,
+                  width: `${question.hotspot.radius / 100 * zonePxW * 2}px`,
+                  height: `${question.hotspot.radius / 100 * zonePxW * 2}px`,
                   transform: 'translate(-50%, -50%)',
                   borderRadius: '50%',
-                  border: `2.5px solid ${zoneCorrect ? '#22c55e' : '#22c55e'}`,
-                  background: zoneCorrect ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.10)',
+                  border: '2.5px solid #22c55e',
+                  background: 'rgba(34,197,94,0.15)',
                   pointerEvents: 'none',
                 }}
               />
@@ -216,7 +217,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
                 style={{
                   position: 'absolute',
                   left: `${zoneClick.x}%`,
-                  top: `${zoneClick.y / zoneAR}%`,
+                  top: `${zoneClick.y}%`,
                   transform: 'translate(-50%, -50%)',
                   pointerEvents: 'none',
                 }}

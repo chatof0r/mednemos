@@ -26,8 +26,13 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
   const [type, setType] = useState<'QCM' | 'QRU' | 'QZONE'>(seed?.type ?? 'QCM');
   const [hotspot, setHotspot] = useState<Hotspot | null>(initial?.hotspot ?? null);
-  const [hotspotAR, setHotspotAR] = useState(1); // aspect-ratio du conteneur image
+  const [containerPxW, setContainerPxW] = useState(0); // largeur en px du conteneur image
   const hotspotContainerRef = useRef<HTMLDivElement>(null);
+
+  const measureContainer = () => {
+    const el = hotspotContainerRef.current;
+    if (el) setContainerPxW(el.offsetWidth);
+  };
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
   const [items, setItems] = useState<Item[]>(initial?.items ?? defaultItems());
   const [reponses, setReponses] = useState<string[]>(initial?.reponses ?? []);
@@ -164,11 +169,11 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   // Handler clic sur l'image pour définir le centre du hotspot
   const handleHotspotClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width * 100;   // % largeur
+    const y = (e.clientY - rect.top)  / rect.height * 100;  // % hauteur
     const ar = rect.width / rect.height;
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.width) * 100; // % de la LARGEUR (unité uniforme)
-    setHotspotAR(ar);
-    setHotspot(prev => ({ x, y, radius: prev?.radius ?? 8 }));
+    setContainerPxW(rect.width);
+    setHotspot(prev => ({ x, y, radius: prev?.radius ?? 8, ar }));
   }, []);
 
   const validate = () => {
@@ -419,21 +424,17 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
                 src={imagePreview}
                 alt="Aperçu"
                 className="w-full object-contain max-h-72"
-                onLoad={() => {
-                  const el = hotspotContainerRef.current;
-                  if (el) setHotspotAR(el.offsetWidth / el.offsetHeight);
-                }}
+                onLoad={measureContainer}
               />
-              {/* Cercle hotspot */}
-              {type === 'QZONE' && hotspot && (
+              {/* Cercle hotspot — rayon en px pour un vrai cercle */}
+              {type === 'QZONE' && hotspot && containerPxW > 0 && (
                 <div
                   style={{
                     position: 'absolute',
                     left: `${hotspot.x}%`,
-                    top: `${hotspot.y / hotspotAR}%`,
-                    width: `${hotspot.radius * 2}%`,
-                    height: 0,
-                    paddingBottom: `${hotspot.radius * 2}%`,
+                    top: `${hotspot.y}%`,
+                    width: `${hotspot.radius / 100 * containerPxW * 2}px`,
+                    height: `${hotspot.radius / 100 * containerPxW * 2}px`,
                     transform: 'translate(-50%, -50%)',
                     borderRadius: '50%',
                     border: '2.5px solid #14b8a6',
