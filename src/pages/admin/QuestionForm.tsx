@@ -401,10 +401,10 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
         <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
       </div>
 
-      {/* ── Énoncé + Type ── */}
+      {/* ── Import rapide + Type ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">Énoncé *</h3>
+          <h3 className="text-sm font-semibold text-slate-700">Import rapide</h3>
           <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
             {(['QCM', 'QRU'] as const).map(t => (
               <button
@@ -419,11 +419,33 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
             ))}
           </div>
         </div>
+        <p className="text-xs text-slate-400 mb-2">
+          Format : <span className="font-mono text-slate-500">Énoncé ; Item A ; Correction A ; ... ; ABD</span>
+        </p>
+        <textarea
+          value={importText}
+          onChange={e => setImportText(e.target.value)}
+          rows={4}
+          placeholder="Énoncé de la question ; Item A ; Correction A ; Item B ; Correction B ; Item C ; Correction C ; Item D ; Correction D ; Item E ; Correction E ; ABCDE"
+          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none mb-3"
+        />
+        <button
+          onClick={parseAndImport}
+          disabled={!importText.trim()}
+          className="text-sm px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Remplir automatiquement
+        </button>
+      </div>
+
+      {/* ── Énoncé ── */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Énoncé *</h3>
         <textarea
           value={enonce}
           onChange={e => setEnonce(e.target.value)}
           rows={4}
-          placeholder="Saisissez l'énoncé..."
+          placeholder="Saisissez ou collez l'énoncé..."
           className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
         />
       </div>
@@ -442,28 +464,6 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
               + Ajouter
             </button>
           </div>
-        </div>
-
-        {/* Import rapide */}
-        <div className="mb-4 bg-slate-50 rounded-xl border border-slate-200 p-3">
-          <p className="text-xs font-medium text-slate-500 mb-2">Import rapide</p>
-          <p className="text-xs text-slate-400 mb-2">
-            Format : <span className="font-mono">Énoncé ; Item A ; Correction A ; Item B ; Correction B ; ... ; ABD</span>
-          </p>
-          <textarea
-            value={importText}
-            onChange={e => setImportText(e.target.value)}
-            rows={3}
-            placeholder="Énoncé ; Item A ; Correction A ; Item B ; Correction B ; ... ; ABD"
-            className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-blue-400 resize-none bg-white mb-2"
-          />
-          <button
-            onClick={parseAndImport}
-            disabled={!importText.trim()}
-            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Remplir les items
-          </button>
         </div>
 
         <div className="space-y-3">
