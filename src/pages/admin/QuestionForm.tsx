@@ -10,19 +10,21 @@ const defaultItems = (): Item[] =>
   ['A', 'B', 'C', 'D', 'E'].map(label => ({ label, enonce: '', justification: '' }));
 
 interface QuestionFormProps {
-  initial?: Question;
+  initial?: Question;           // présent uniquement en mode édition (a un id)
+  prefill?: Partial<Question>;  // pré-remplissage pour "ajouter à la suite"
   onSaved: (q: Question) => void;
   onCancel: () => void;
 }
 
-export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFormProps) {
-  const [niveau, setNiveau] = useState<'P2' | 'D1'>(initial?.niveau ?? 'P2');
-  const [matiere, setMatiere] = useState(initial?.matiere ?? '');
-  const [cours, setCours] = useState<string[]>(initial?.cours ?? []);
-  const [annee, setAnnee] = useState<number | ''>(initial?.annee ?? '');
-  const [session, setSession] = useState<1 | 2 | null>(initial?.session ?? null);
+export default function QuestionForm({ initial, prefill, onSaved, onCancel }: QuestionFormProps) {
+  const seed = initial ?? prefill;
+  const [niveau, setNiveau] = useState<'P2' | 'D1'>(seed?.niveau ?? 'P2');
+  const [matiere, setMatiere] = useState(seed?.matiere ?? '');
+  const [cours, setCours] = useState<string[]>(seed?.cours ?? []);
+  const [annee, setAnnee] = useState<number | ''>(seed?.annee ?? '');
+  const [session, setSession] = useState<1 | 2 | null>(seed?.session ?? null);
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
-  const [type, setType] = useState<'QCM' | 'QRU'>(initial?.type ?? 'QCM');
+  const [type, setType] = useState<'QCM' | 'QRU'>(seed?.type ?? 'QCM');
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
   const [items, setItems] = useState<Item[]>(initial?.items ?? defaultItems());
   const [reponses, setReponses] = useState<string[]>(initial?.reponses ?? []);
@@ -188,7 +190,7 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
       const url = await uploadImage();
       const payload = buildPayload(url, statut);
       let saved: Question;
-      if (initial) {
+      if (initial?.id) {
         const { data, error } = await supabase.from('questions').update(payload).eq('id', initial.id).select().single();
         if (error) throw error;
         saved = data as Question;

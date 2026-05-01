@@ -112,7 +112,8 @@ export default function AdminQuestions() {
           </h2>
         </div>
         <QuestionForm
-          initial={view === 'edit' && editing ? editing : prefill ? (prefill as Question) : undefined}
+          initial={view === 'edit' && editing ? editing : undefined}
+          prefill={view === 'create' && prefill ? prefill : undefined}
           onSaved={handleSaved}
           onCancel={() => { setView('list'); setEditing(null); setPrefill(null); }}
         />
