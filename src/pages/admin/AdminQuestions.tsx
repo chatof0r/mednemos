@@ -249,62 +249,84 @@ export default function AdminQuestions() {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-100">
+                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Question</th>
                 <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Niveau</th>
                 <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Matière</th>
                 <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Cours</th>
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Année</th>
                 <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Type</th>
                 <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Statut</th>
                 <th className="text-right text-xs font-medium text-slate-400 pb-2">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filtered.map(q => (
-                <tr key={q.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="py-3 pr-4">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
-                      q.niveau === 'P2' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'
-                    }`}>{q.niveau}</span>
-                  </td>
-                  <td className="py-3 pr-4 text-slate-700 max-w-[160px] truncate">{q.matiere}</td>
-                  <td className="py-3 pr-4 text-slate-500 max-w-[160px] truncate">{q.cours?.join(', ') ?? '—'}</td>
-                  <td className="py-3 pr-4 text-slate-500">
-                    {q.annee ? `${q.annee}${q.session ? `.${q.session}` : ''}` : '—'}
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
-                      q.type === 'QCM' ? 'bg-violet-100 text-violet-700' : 'bg-orange-100 text-orange-700'
-                    }`}>{q.type}</span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
-                      q.statut === 'publiee' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {q.statut === 'publiee' ? 'Publiée' : 'Brouillon'}
-                    </span>
-                  </td>
-                  <td className="py-3 text-right">
-                    <button
-                      onClick={() => startEdit(q)}
-                      className="text-slate-400 hover:text-blue-600 transition-colors mr-3"
-                      title="Modifier"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => handleDelete(q.id)}
-                      className="text-slate-400 hover:text-red-500 transition-colors"
-                      title="Supprimer"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
+            <tbody>
+              {filtered.map((q, idx) => {
+                const yearKey = q.annee ?? null;
+                const prevYearKey = idx > 0 ? (filtered[idx - 1].annee ?? null) : yearKey;
+                const showSeparator = idx > 0 && yearKey !== prevYearKey;
+                const ref = q.numero_officiel
+                  ? `Q${q.numero_officiel} / ${q.annee ?? '?'}${q.session ? `.${q.session}` : ''}`
+                  : q.annee ? `${q.annee}${q.session ? `.${q.session}` : ''}` : '—';
+                return (
+                  <>
+                    {showSeparator && (
+                      <tr key={`sep-${q.id}`}>
+                        <td colSpan={7} className="pt-5 pb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-slate-400 tracking-wide uppercase whitespace-nowrap">
+                              {prevYearKey ?? '—'}
+                            </span>
+                            <div className="flex-1 h-px bg-slate-100" />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    <tr key={q.id} className="hover:bg-slate-50/50 transition-colors border-t border-slate-50 first:border-t-0">
+                      <td className="py-3 pr-4">
+                        <span className="text-xs font-mono font-medium text-slate-600">{ref}</span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                          q.niveau === 'P2' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'
+                        }`}>{q.niveau}</span>
+                      </td>
+                      <td className="py-3 pr-4 text-slate-700 max-w-[150px] truncate">{q.matiere}</td>
+                      <td className="py-3 pr-4 text-slate-500 max-w-[150px] truncate">{q.cours?.join(', ') ?? '—'}</td>
+                      <td className="py-3 pr-4">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                          q.type === 'QCM' ? 'bg-violet-100 text-violet-700' : 'bg-orange-100 text-orange-700'
+                        }`}>{q.type}</span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
+                          q.statut === 'publiee' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {q.statut === 'publiee' ? 'Publiée' : 'Brouillon'}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right">
+                        <button
+                          onClick={() => startEdit(q)}
+                          className="text-slate-400 hover:text-blue-600 transition-colors mr-3"
+                          title="Modifier"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(q.id)}
+                          className="text-slate-400 hover:text-red-500 transition-colors"
+                          title="Supprimer"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>
