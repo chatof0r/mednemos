@@ -12,7 +12,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-type ItemState = 'neutral' | 'correct-checked' | 'incorrect-checked' | 'correct-missed';
+type ItemState = 'neutral' | 'correct-checked' | 'incorrect-checked' | 'correct-missed' | 'incorrect-missed';
 
 function getItemState(label: string, selected: string[], reponses: string[], validated: boolean): ItemState {
   if (!validated) return 'neutral';
@@ -21,8 +21,37 @@ function getItemState(label: string, selected: string[], reponses: string[], val
   if (isCorrect && isSelected) return 'correct-checked';
   if (!isCorrect && isSelected) return 'incorrect-checked';
   if (isCorrect && !isSelected) return 'correct-missed';
-  return 'neutral';
+  return 'incorrect-missed';
 }
+
+function scoreForQuestion(q: Question, sel: string[]): number {
+  const errors = q.items.filter(i => {
+    const isCorrect = q.reponses.includes(i.label);
+    const isSelected = sel.includes(i.label);
+    return (isCorrect && !isSelected) || (!isCorrect && isSelected);
+  }).length;
+  if (errors === 0) return 1;
+  if (errors === 1) return 0.5;
+  return 0;
+}
+
+const CheckIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+  </svg>
+);
+
+const XIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
+  <svg className={`${className} transition-transform duration-200 ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+  </svg>
+);
 
 interface QuestionCardProps {
   question: Question;
@@ -40,6 +69,32 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
   const [remarkText, setRemarkText] = useState('');
   const [remarkSent, setRemarkSent] = useState(false);
   const [showRemark, setShowRemark] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (validated) {
+      const toExpand = new Set(
+        question.items
+          .filter(i => {
+            const s = getItemState(i.label, selected, question.reponses, true);
+            return s === 'incorrect-checked' || s === 'correct-missed';
+          })
+          .map(i => i.label)
+      );
+      setExpandedItems(toExpand);
+    } else {
+      setExpandedItems(new Set());
+    }
+  }, [validated]);
+
+  const toggleExpand = (label: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
 
   const sendRemark = async () => {
     if (!remarkText.trim()) return;
@@ -55,24 +110,18 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
     <div className="bg-white dark:bg-[#141414] border border-slate-100 dark:border-white/10 rounded-2xl shadow-sm p-6 sm:p-8 transition-colors">
       {/* Progress + badge */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-slate-400 dark:text-white/30 font-medium">
-          {index + 1} / {total}
-        </span>
+        <span className="text-xs text-slate-400 dark:text-white/30 font-medium">{index + 1} / {total}</span>
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
           question.type === 'QCM'
             ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400'
             : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
-        }`}>
-          {question.type}
-        </span>
+        }`}>{question.type}</span>
       </div>
 
       {/* Progress bar */}
       <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-1 mb-6">
-        <div
-          className="bg-[#e3fe52]/70 dark:bg-[#e3fe52]/50 h-1 rounded-full transition-all"
-          style={{ width: `${((index + 1) / total) * 100}%` }}
-        />
+        <div className="bg-[#e3fe52]/70 dark:bg-[#e3fe52]/50 h-1 rounded-full transition-all"
+          style={{ width: `${((index + 1) / total) * 100}%` }} />
       </div>
 
       {/* Image */}
@@ -88,73 +137,95 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
         {question.items.map((item: Item) => {
           const state = getItemState(item.label, selected, question.reponses, validated);
           const isSelected = selected.includes(item.label);
+          const isExpanded = expandedItems.has(item.label);
 
-          const borderClass = !validated
+          // ── Styles par état ──
+          const containerClass = !validated
             ? isSelected
-              ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5 dark:bg-[#e3fe52]/5'
+              ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5'
               : 'border-slate-200 dark:border-white/10 bg-white dark:bg-transparent hover:border-slate-300 dark:hover:border-white/20'
             : state === 'correct-checked'
-              ? 'border-green-400 dark:border-green-500/50 bg-green-50 dark:bg-green-500/5'
+              ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
               : state === 'incorrect-checked'
-                ? 'border-red-400 dark:border-red-500/50 bg-red-50 dark:bg-red-500/5'
+                ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
                 : state === 'correct-missed'
-                  ? 'border-green-700 dark:border-green-400/30 bg-green-100 dark:bg-green-500/10'
-                  : 'border-slate-200 dark:border-white/8 bg-white dark:bg-transparent';
+                  ? 'border-green-600/60 dark:border-green-400/40 bg-green-100/80 dark:bg-green-500/20'
+                  : 'border-slate-200/60 dark:border-white/8 bg-white/50 dark:bg-transparent';
 
-          const checkClass = !validated
-            ? isSelected
-              ? 'border-[#e3fe52] bg-[#e3fe52]'
-              : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent'
-            : state === 'correct-checked'
-              ? 'border-green-500 bg-green-500'
-              : state === 'incorrect-checked'
-                ? 'border-red-500 bg-red-500'
-                : state === 'correct-missed'
-                  ? 'border-green-600 bg-green-600 dark:border-green-400 dark:bg-green-500/40'
-                  : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent';
+          const iconBg = !validated
+            ? isSelected ? 'border-[#e3fe52] bg-[#e3fe52]' : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent'
+            : state === 'correct-checked' ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
+              : state === 'incorrect-checked' ? 'border-red-500 bg-red-500'
+                : state === 'correct-missed' ? 'border-green-600 bg-green-600 dark:border-green-400 dark:bg-green-500/50'
+                  : 'border-slate-300/60 dark:border-white/15 bg-white/50 dark:bg-transparent';
+
+          const labelColor = !validated
+            ? 'text-slate-700 dark:text-white/70'
+            : state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
+              : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
+                : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
+                  : 'text-slate-400 dark:text-white/30';
+
+          const textColor = !validated
+            ? 'text-slate-700 dark:text-white'
+            : state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
+              : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
+                : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
+                  : 'text-slate-500 dark:text-white/40';
+
+          // Icône dans la case : ✓ ou ✗
+          const showCheck = !validated ? isSelected : (state === 'correct-checked' || state === 'incorrect-missed');
+          const showX = validated && (state === 'incorrect-checked' || state === 'correct-missed');
 
           return (
-            <div key={item.label}>
-              <button
-                onClick={() => !validated && onToggle(item.label)}
-                disabled={validated}
-                className={`w-full flex items-start gap-3 p-3 rounded-xl border transition-all text-left ${borderClass}`}
+            <div key={item.label} className={`rounded-xl border transition-all overflow-hidden ${containerClass}`}>
+              {/* Ligne principale */}
+              <div
+                className="flex items-center gap-3 p-3 cursor-pointer"
+                onClick={() => validated ? toggleExpand(item.label) : onToggle(item.label)}
               >
-                <div className={`shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center border-2 transition-all ${
+                {/* Icône sélection */}
+                <div className={`shrink-0 w-5 h-5 flex items-center justify-center border-2 transition-all ${
                   question.type === 'QRU' ? 'rounded-full' : 'rounded-md'
-                } ${checkClass}`}>
-                  {(isSelected || state === 'correct-missed') && (
-                    <svg className="w-3 h-3 text-slate-800 dark:text-[#0c0c0c]" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
+                } ${iconBg}`}>
+                  {showCheck && <CheckIcon className="w-3 h-3 text-[#0c0c0c] dark:text-[#0c0c0c]" />}
+                  {showX && <XIcon className="w-3 h-3 text-white" />}
                 </div>
+
+                {/* Texte */}
                 <div className="flex-1 min-w-0">
-                  <span className={`text-sm font-semibold mr-1 ${
-                    validated
-                      ? state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
-                        : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
-                          : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
-                            : 'text-slate-400 dark:text-white/30'
-                      : 'text-slate-700 dark:text-white/70'
-                  }`}>{item.label}.</span>
-                  <span className={`text-sm ${
-                    validated
-                      ? state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
-                        : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
-                          : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
-                            : 'text-slate-500 dark:text-white/40'
-                      : 'text-slate-700 dark:text-white'
-                  }`}>{item.enonce}</span>
-                  {validated && (state !== 'neutral') && item.justification && (
-                    <p className={`mt-1.5 text-xs leading-relaxed italic ${
-                      state === 'correct-checked' ? 'text-green-600 dark:text-green-500'
-                        : state === 'incorrect-checked' ? 'text-red-600 dark:text-red-400'
-                          : 'text-green-700 dark:text-green-400'
-                    }`}>{item.justification}</p>
-                  )}
+                  <span className={`text-sm font-semibold mr-1 ${labelColor}`}>{item.label}.</span>
+                  <span className={`text-sm ${textColor}`}>{item.enonce}</span>
                 </div>
-              </button>
+
+                {/* Chevron expand (visible après validation) */}
+                {validated && item.justification && (
+                  <ChevronIcon
+                    open={isExpanded}
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      state === 'correct-checked' ? 'text-green-400 dark:text-green-500'
+                        : state === 'incorrect-checked' ? 'text-red-400'
+                          : state === 'correct-missed' ? 'text-green-600 dark:text-green-400'
+                            : 'text-slate-300 dark:text-white/20'
+                    }`}
+                  />
+                )}
+              </div>
+
+              {/* Justification expansible */}
+              {validated && isExpanded && item.justification && (
+                <div className={`px-3 pb-3 pt-0 text-xs leading-relaxed italic border-t ${
+                  state === 'correct-checked'
+                    ? 'border-green-200/50 dark:border-green-500/20 text-green-700 dark:text-green-400'
+                    : state === 'incorrect-checked'
+                      ? 'border-red-200/50 dark:border-red-500/20 text-red-600 dark:text-red-400'
+                      : state === 'correct-missed'
+                        ? 'border-green-300/50 dark:border-green-400/20 text-green-800 dark:text-green-300'
+                        : 'border-slate-200/50 dark:border-white/8 text-slate-500 dark:text-white/40'
+                }`}>
+                  {item.justification}
+                </div>
+              )}
             </div>
           );
         })}
@@ -167,7 +238,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             onClick={onValidate}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all
               bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
-              text-white dark:text-[#e3fe52]
+              text-[#0c0c0c] dark:text-[#0c0c0c]
               hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
           >
             Valider
@@ -177,7 +248,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             onClick={onNext}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all
               bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
-              text-white dark:text-[#e3fe52]
+              text-[#0c0c0c] dark:text-[#0c0c0c]
               hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
           >
             {isLast ? 'Voir les résultats' : 'Question suivante →'}
@@ -230,20 +301,20 @@ interface ResultsProps {
 }
 
 function Results({ questions, answers, onRestart }: ResultsProps) {
-  const wrong = questions.filter(q => {
-    const sel = answers[q.id] ?? [];
-    return [...q.reponses].sort().join(',') !== [...sel].sort().join(',');
-  });
-  const score = questions.length - wrong.length;
-  const pct = Math.round((score / questions.length) * 100);
+  const totalScore = questions.reduce((sum, q) => sum + scoreForQuestion(q, answers[q.id] ?? []), 0);
+  const displayScore = totalScore % 1 === 0 ? String(totalScore) : totalScore.toFixed(1);
+  const pct = Math.round((totalScore / questions.length) * 100);
   const color = pct >= 70 ? 'text-green-500' : pct >= 50 ? 'text-orange-400' : 'text-red-400';
   const barColor = pct >= 70 ? 'bg-green-500' : pct >= 50 ? 'bg-orange-400' : 'bg-red-400';
+
+  // Seulement les questions avec au moins une erreur
+  const errorQuestions = questions.filter(q => scoreForQuestion(q, answers[q.id] ?? []) < 1);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <div className="bg-white dark:bg-[#141414] border border-slate-100 dark:border-white/10 rounded-2xl shadow-sm p-8 text-center mb-8 transition-colors">
-        <div className={`text-6xl font-bold mb-2 ${color}`}>{score}/{questions.length}</div>
-        <div className="text-slate-400 dark:text-white/30 text-sm mb-5">{pct}% de bonnes réponses</div>
+        <div className={`text-6xl font-bold mb-2 ${color}`}>{displayScore}<span className="text-3xl text-slate-300 dark:text-white/20">/{questions.length}</span></div>
+        <div className="text-slate-400 dark:text-white/30 text-sm mb-5">{pct}% de réussite</div>
         <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-2 mb-7 overflow-hidden">
           <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
@@ -251,43 +322,63 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
           onClick={onRestart}
           className="px-6 py-3 rounded-xl font-semibold text-sm transition-all
             bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
-            text-white dark:text-[#e3fe52]
+            text-[#0c0c0c] dark:text-[#0c0c0c]
             hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
         >
           Nouvelle session
         </button>
       </div>
 
-      {wrong.length > 0 && (
+      {errorQuestions.length > 0 && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30 mb-4">
-            À revoir ({wrong.length})
+            Erreurs à revoir ({errorQuestions.length})
           </p>
           <div className="space-y-4">
-            {wrong.map(q => {
+            {errorQuestions.map(q => {
               const sel = answers[q.id] ?? [];
+              const pts = scoreForQuestion(q, sel);
+              // Seulement les items erronés
+              const errorItems = q.items.filter(i => {
+                const s = getItemState(i.label, sel, q.reponses, true);
+                return s === 'incorrect-checked' || s === 'correct-missed';
+              });
+
               return (
                 <div key={q.id} className="bg-white dark:bg-[#141414] border border-slate-100 dark:border-white/10 rounded-2xl p-5 transition-colors">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      q.type === 'QCM' ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400' : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
-                    }`}>{q.type}</span>
-                    <span className="text-xs text-slate-400 dark:text-white/30">{q.matiere}{q.annee ? ` · ${q.annee}` : ''}</span>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        q.type === 'QCM' ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400' : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
+                      }`}>{q.type}</span>
+                      <span className="text-xs text-slate-400 dark:text-white/30">{q.matiere}{q.annee ? ` · ${q.annee}` : ''}</span>
+                    </div>
+                    <span className={`text-sm font-bold ${pts === 0.5 ? 'text-orange-400' : 'text-red-400'}`}>
+                      {pts % 1 === 0 ? pts : pts.toFixed(1)} pt
+                    </span>
                   </div>
                   {q.image_url && <img src={q.image_url} alt="" className="w-full max-h-48 object-contain rounded-lg mb-3 bg-slate-50 dark:bg-white/5" />}
                   <p className="text-sm font-medium text-slate-800 dark:text-white mb-3 whitespace-pre-wrap">{q.enonce}</p>
-                  <div className="space-y-1.5">
-                    {q.items.map(item => {
-                      const state = getItemState(item.label, sel, q.reponses, true);
-                      if (state === 'neutral') return null;
+                  <div className="space-y-2">
+                    {errorItems.map(item => {
+                      const s = getItemState(item.label, sel, q.reponses, true);
                       return (
                         <div key={item.label} className={`p-2.5 rounded-lg text-xs ${
-                          state === 'correct-checked' ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400'
-                            : state === 'incorrect-checked' ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
-                              : 'bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-300'
+                          s === 'incorrect-checked'
+                            ? 'bg-red-50/80 dark:bg-red-500/10 text-red-700 dark:text-red-400'
+                            : 'bg-green-100/80 dark:bg-green-500/10 text-green-800 dark:text-green-300'
                         }`}>
-                          <span className="font-bold">{item.label}.</span> {item.enonce}
-                          {item.justification && <p className="mt-1 italic opacity-70">{item.justification}</p>}
+                          <div className="flex items-center gap-1.5 mb-1">
+                            {s === 'incorrect-checked'
+                              ? <XIcon className="w-3 h-3 shrink-0" />
+                              : <XIcon className="w-3 h-3 shrink-0" />
+                            }
+                            <span className="font-bold">{item.label}.</span>
+                            <span>{item.enonce}</span>
+                          </div>
+                          {item.justification && (
+                            <p className="italic opacity-70 pl-4">{item.justification}</p>
+                          )}
                         </div>
                       );
                     })}
