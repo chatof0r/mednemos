@@ -98,8 +98,11 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
 
   const sendRemark = async () => {
     if (!remarkText.trim()) return;
+    const ref = question.numero_officiel
+      ? `Q${question.numero_officiel} / ${question.annee ?? '?'}${question.session ? `.${question.session}` : ''}`
+      : question.annee ? String(question.annee) : '?';
     await supabase.from('suggestions').insert({
-      message: `[Q ${question.id.slice(0, 8)} - ${question.matiere}] ${remarkText.trim()}`,
+      message: `[${question.matiere} - ${ref}] ${remarkText.trim()}`,
     });
     setRemarkSent(true);
     setRemarkText('');
@@ -238,7 +241,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             onClick={onValidate}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all
               bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
-              text-[#0c0c0c] dark:text-[#0c0c0c]
+              text-slate-900 dark:text-slate-900
               hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
           >
             Valider
@@ -248,7 +251,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             onClick={onNext}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all
               bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40
-              text-[#0c0c0c] dark:text-[#0c0c0c]
+              text-slate-900 dark:text-slate-900
               hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
           >
             {isLast ? 'Voir les résultats' : 'Question suivante →'}
@@ -270,7 +273,7 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
               onChange={e => setRemarkText(e.target.value)}
               rows={2}
               placeholder="Décris l'erreur ou ta suggestion..."
-              className="w-full text-xs border border-black/10 dark:border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-[#e3fe52]/40 resize-none bg-black/30 dark:bg-white/30 text-slate-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40"
+              className="w-full text-xs border border-black/10 dark:border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-[#e3fe52]/40 resize-none bg-slate-100 dark:bg-white/30 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/40"
             />
             <div className="flex gap-2 mt-2">
               <button

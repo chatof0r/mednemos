@@ -12,6 +12,9 @@ export default function AdminQuestions() {
   const [editing, setEditing] = useState<Question | null>(null);
   const [lastSaved, setLastSaved] = useState<Question | null>(null);
   const [prefill, setPrefill] = useState<Partial<Question> | null>(null);
+  const [filterNiveau, setFilterNiveau] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [filterStatut, setFilterStatut] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -60,6 +63,13 @@ export default function AdminQuestions() {
     setView('create');
   };
 
+  const filtered = questions.filter(q => {
+    if (filterNiveau && q.niveau !== filterNiveau) return false;
+    if (filterType && q.type !== filterType) return false;
+    if (filterStatut && q.statut !== filterStatut) return false;
+    return true;
+  });
+
   if (view === 'create' || view === 'edit') {
     return (
       <div>
@@ -90,7 +100,9 @@ export default function AdminQuestions() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold text-slate-800">
           Questions
-          <span className="ml-2 text-sm font-normal text-slate-400">({questions.length})</span>
+          <span className="ml-2 text-sm font-normal text-slate-400">
+            ({filtered.length}{filtered.length !== questions.length ? `/${questions.length}` : ''})
+          </span>
         </h2>
         <button
           onClick={startCreate}
@@ -115,6 +127,46 @@ export default function AdminQuestions() {
           >
             + Ajouter une question à la suite
           </button>
+        </div>
+      )}
+
+      {/* Filtres */}
+      {!loading && questions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
+          <span className="text-xs text-slate-400 mr-1">Filtrer :</span>
+          {(['P2', 'D1'] as const).map(n => (
+            <button key={n} onClick={() => setFilterNiveau(filterNiveau === n ? null : n)}
+              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                filterNiveau === n
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                  : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+              }`}>{n}</button>
+          ))}
+          <div className="w-px h-4 bg-slate-200" />
+          {(['QCM', 'QRU'] as const).map(t => (
+            <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
+              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                filterType === t
+                  ? 'bg-violet-100 text-violet-700 border border-violet-300'
+                  : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+              }`}>{t}</button>
+          ))}
+          <div className="w-px h-4 bg-slate-200" />
+          {[{ v: 'publiee', l: 'Publiée' }, { v: 'brouillon', l: 'Brouillon' }].map(s => (
+            <button key={s.v} onClick={() => setFilterStatut(filterStatut === s.v ? null : s.v)}
+              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                filterStatut === s.v
+                  ? 'bg-green-100 text-green-700 border border-green-300'
+                  : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+              }`}>{s.l}</button>
+          ))}
+          {(filterNiveau || filterType || filterStatut) && (
+            <button onClick={() => { setFilterNiveau(null); setFilterType(null); setFilterStatut(null); }}
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors ml-1 flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              Effacer
+            </button>
+          )}
         </div>
       )}
 
@@ -145,7 +197,7 @@ export default function AdminQuestions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {questions.map(q => (
+              {filtered.map(q => (
                 <tr key={q.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-3 pr-4">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
