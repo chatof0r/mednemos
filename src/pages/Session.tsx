@@ -35,9 +35,13 @@ function zoneHit(q: Question, sel: string[]): boolean | null {
 function scoreForQuestion(q: Question, sel: string[]): number {
   if (q.type === 'QZONE') {
     const hit = zoneHit(q, sel);
-    if (hit === null) return 0;    // pas de réponse
-    return hit ? 1 : -1;          // correct ou malus
+    return hit ? 1 : 0;
   }
+  if (q.type === 'QRU') {
+    const correct = q.reponses[0];
+    return sel.length === 1 && sel[0] === correct ? 1 : 0;
+  }
+  // QCM : 0 erreur = 1pt, 1 erreur = 0.5pt, 2+ = 0pt
   const errors = q.items.filter(i => {
     const isCorrect = q.reponses.includes(i.label);
     const isSelected = sel.includes(i.label);
@@ -246,8 +250,8 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
               {zoneCorrect === null
                 ? 'Pas de réponse — 0 pt'
                 : zoneCorrect
-                  ? '✓ Bonne zone — +1 pt'
-                  : '✗ Mauvaise zone — −1 pt (malus)'}
+                  ? '✓ Bonne zone — 1 pt'
+                  : '✗ Mauvaise zone — 0 pt'}
             </div>
           )}
 
