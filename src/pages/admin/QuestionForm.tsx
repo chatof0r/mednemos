@@ -88,15 +88,29 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
 
   const parseAndImport = () => {
     const parts = importText.split(';').map(s => s.trim()).filter(Boolean);
+    if (parts.length < 2) return;
+
+    // Détecte si le dernier élément est une liste de réponses (ex: "ABD", "A B C", "AC")
+    const last = parts[parts.length - 1];
+    const isAnswerKey = /^[A-Ha-h](\s*[A-Ha-h])*$/.test(last);
+
+    const enoncePart = parts[0];
+    const itemParts = isAnswerKey ? parts.slice(1, -1) : parts.slice(1);
+    const answerLabels = isAnswerKey
+      ? [...last.toUpperCase().replace(/\s/g, '')].filter(c => ITEM_LABELS.includes(c))
+      : [];
+
     const newItems: Item[] = [];
-    for (let i = 0; i + 1 < parts.length; i += 2) {
+    for (let i = 0; i + 1 < itemParts.length; i += 2) {
       const label = ITEM_LABELS[newItems.length];
       if (!label) break;
-      newItems.push({ label, enonce: parts[i], justification: parts[i + 1] });
+      newItems.push({ label, enonce: itemParts[i], justification: itemParts[i + 1] });
     }
+
     if (newItems.length === 0) return;
+    setEnonce(enoncePart);
     setItems(newItems);
-    setReponses([]);
+    setReponses(answerLabels);
     setImportText('');
   };
 
@@ -434,13 +448,13 @@ export default function QuestionForm({ initial, onSaved, onCancel }: QuestionFor
         <div className="mb-4 bg-slate-50 rounded-xl border border-slate-200 p-3">
           <p className="text-xs font-medium text-slate-500 mb-2">Import rapide</p>
           <p className="text-xs text-slate-400 mb-2">
-            Colle le texte au format : <span className="font-mono">Item A ; Correction A ; Item B ; Correction B ; ...</span>
+            Format : <span className="font-mono">Énoncé ; Item A ; Correction A ; Item B ; Correction B ; ... ; ABD</span>
           </p>
           <textarea
             value={importText}
             onChange={e => setImportText(e.target.value)}
             rows={3}
-            placeholder="Colle le texte ici..."
+            placeholder="Énoncé ; Item A ; Correction A ; Item B ; Correction B ; ... ; ABD"
             className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-blue-400 resize-none bg-white mb-2"
           />
           <button
