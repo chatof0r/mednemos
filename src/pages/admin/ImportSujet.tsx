@@ -136,7 +136,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
   // ── Metadata ──────────────────────────────────────────────────────────────
   const [niveau, setNiveau] = useState<'P2' | 'D1'>('P2');
   const [matiere, setMatiere] = useState('');
-  const [annee, setAnnee] = useState<number>(new Date().getFullYear());
+  const [annee, setAnnee] = useState<number>(ANNEES[0]);
   const [session, setSession] = useState<1 | 2>(1);
 
   // ── Raw text ──────────────────────────────────────────────────────────────

@@ -177,7 +177,7 @@ export default function AdminQuestions() {
             <strong>{importCount}</strong> question{importCount > 1 ? 's' : ''} importée{importCount > 1 ? 's' : ''} en brouillon — complétez cours et réponses une par une
           </span>
           <button
-            onClick={() => { setImportCount(null); setFilterStatut('brouillon'); }}
+            onClick={() => { setImportCount(null); clearAll(); setFilterStatut('brouillon'); }}
             className="text-sm font-medium text-blue-700 hover:text-blue-900 transition-colors underline underline-offset-2 ml-4 shrink-0"
           >
             Voir les brouillons →
