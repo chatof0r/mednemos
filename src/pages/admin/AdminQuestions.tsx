@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Question } from '../../types';
 import QuestionForm from './QuestionForm';
@@ -12,9 +12,13 @@ export default function AdminQuestions() {
   const [editing, setEditing] = useState<Question | null>(null);
   const [lastSaved, setLastSaved] = useState<Question | null>(null);
   const [prefill, setPrefill] = useState<Partial<Question> | null>(null);
+
+  // Filters
   const [filterNiveau, setFilterNiveau] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
   const [filterStatut, setFilterStatut] = useState<string | null>(null);
+  const [filterMatiere, setFilterMatiere] = useState<string | null>(null);
+  const [filterCours, setFilterCours] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -22,7 +26,7 @@ export default function AdminQuestions() {
       .from('questions')
       .select('*')
       .order('annee', { ascending: false, nullsFirst: false })
-      .order('session', { ascending: false, nullsFirst: false })
+      .order('session', { ascending: true, nullsFirst: false })
       .order('numero_officiel', { ascending: true, nullsFirst: false });
     if (error) console.error('load error:', error);
     setQuestions((data ?? []) as Question[]);
@@ -30,6 +34,13 @@ export default function AdminQuestions() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Derived lists for filter options
+  const allMatieres = useMemo(() =>
+    [...new Set(questions.map(q => q.matiere))].sort(), [questions]);
+
+  const allCours = useMemo(() =>
+    [...new Set(questions.flatMap(q => q.cours ?? []))].sort(), [questions]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Supprimer cette question définitivement ?')) return;
@@ -65,10 +76,22 @@ export default function AdminQuestions() {
     setView('create');
   };
 
+  const clearAll = () => {
+    setFilterNiveau(null);
+    setFilterType(null);
+    setFilterStatut(null);
+    setFilterMatiere(null);
+    setFilterCours(null);
+  };
+
+  const hasFilter = filterNiveau || filterType || filterStatut || filterMatiere || filterCours;
+
   const filtered = questions.filter(q => {
     if (filterNiveau && q.niveau !== filterNiveau) return false;
     if (filterType && q.type !== filterType) return false;
     if (filterStatut && q.statut !== filterStatut) return false;
+    if (filterMatiere && q.matiere !== filterMatiere) return false;
+    if (filterCours && !(q.cours ?? []).includes(filterCours)) return false;
     return true;
   });
 
@@ -117,7 +140,7 @@ export default function AdminQuestions() {
         </button>
       </div>
 
-      {/* Success banner with add another */}
+      {/* Success banner */}
       {lastSaved && (
         <div className="mb-4 flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3">
           <span className="text-sm text-green-700">
@@ -134,40 +157,80 @@ export default function AdminQuestions() {
 
       {/* Filtres */}
       {!loading && questions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-4">
-          <span className="text-xs text-slate-400 mr-1">Filtrer :</span>
-          {(['P2', 'D1'] as const).map(n => (
-            <button key={n} onClick={() => setFilterNiveau(filterNiveau === n ? null : n)}
-              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                filterNiveau === n
-                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                  : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
-              }`}>{n}</button>
-          ))}
-          <div className="w-px h-4 bg-slate-200" />
-          {(['QCM', 'QRU'] as const).map(t => (
-            <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
-              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                filterType === t
-                  ? 'bg-violet-100 text-violet-700 border border-violet-300'
-                  : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
-              }`}>{t}</button>
-          ))}
-          <div className="w-px h-4 bg-slate-200" />
-          {[{ v: 'publiee', l: 'Publiée' }, { v: 'brouillon', l: 'Brouillon' }].map(s => (
-            <button key={s.v} onClick={() => setFilterStatut(filterStatut === s.v ? null : s.v)}
-              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                filterStatut === s.v
-                  ? 'bg-green-100 text-green-700 border border-green-300'
-                  : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
-              }`}>{s.l}</button>
-          ))}
-          {(filterNiveau || filterType || filterStatut) && (
-            <button onClick={() => { setFilterNiveau(null); setFilterType(null); setFilterStatut(null); }}
-              className="text-xs text-slate-400 hover:text-slate-600 transition-colors ml-1 flex items-center gap-1">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              Effacer
-            </button>
+        <div className="space-y-2 mb-4">
+          {/* Row 1 : Niveau / Type / Statut */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-400 w-12 shrink-0">Niveau</span>
+            {(['P2', 'D1'] as const).map(n => (
+              <button key={n} onClick={() => setFilterNiveau(filterNiveau === n ? null : n)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                  filterNiveau === n
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                    : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+                }`}>{n}</button>
+            ))}
+            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+            <span className="text-xs text-slate-400">Type</span>
+            {(['QCM', 'QRU'] as const).map(t => (
+              <button key={t} onClick={() => setFilterType(filterType === t ? null : t)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                  filterType === t
+                    ? 'bg-violet-100 text-violet-700 border border-violet-300'
+                    : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+                }`}>{t}</button>
+            ))}
+            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+            <span className="text-xs text-slate-400">Statut</span>
+            {[{ v: 'publiee', l: 'Publiée' }, { v: 'brouillon', l: 'Brouillon' }].map(s => (
+              <button key={s.v} onClick={() => setFilterStatut(filterStatut === s.v ? null : s.v)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                  filterStatut === s.v
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+                }`}>{s.l}</button>
+            ))}
+            {hasFilter && (
+              <button onClick={clearAll}
+                className="text-xs text-slate-400 hover:text-slate-600 transition-colors ml-1 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Effacer tout
+              </button>
+            )}
+          </div>
+
+          {/* Row 2 : Matière */}
+          {allMatieres.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-400 w-12 shrink-0">Matière</span>
+              {allMatieres.map(m => (
+                <button key={m} onClick={() => { setFilterMatiere(filterMatiere === m ? null : m); setFilterCours(null); }}
+                  className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors max-w-[180px] truncate ${
+                    filterMatiere === m
+                      ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                      : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+                  }`}>{m}</button>
+              ))}
+            </div>
+          )}
+
+          {/* Row 3 : Cours (dynamique selon matière sélectionnée ou tous) */}
+          {allCours.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-400 w-12 shrink-0">Cours</span>
+              {(filterMatiere
+                ? [...new Set(questions.filter(q => q.matiere === filterMatiere).flatMap(q => q.cours ?? []))].sort()
+                : allCours
+              ).map(c => (
+                <button key={c} onClick={() => setFilterCours(filterCours === c ? null : c)}
+                  className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors max-w-[200px] truncate ${
+                    filterCours === c
+                      ? 'bg-teal-100 text-teal-700 border border-teal-300'
+                      : 'bg-slate-100 text-slate-500 border border-transparent hover:border-slate-200'
+                  }`}>{c}</button>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -177,10 +240,7 @@ export default function AdminQuestions() {
       ) : questions.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-slate-400 text-sm mb-3">Aucune question pour l'instant</p>
-          <button
-            onClick={startCreate}
-            className="text-blue-600 text-sm font-medium hover:underline"
-          >
+          <button onClick={startCreate} className="text-blue-600 text-sm font-medium hover:underline">
             Créer la première question
           </button>
         </div>
@@ -208,7 +268,9 @@ export default function AdminQuestions() {
                   </td>
                   <td className="py-3 pr-4 text-slate-700 max-w-[160px] truncate">{q.matiere}</td>
                   <td className="py-3 pr-4 text-slate-500 max-w-[160px] truncate">{q.cours?.join(', ') ?? '—'}</td>
-                  <td className="py-3 pr-4 text-slate-500">{q.annee ?? '—'}</td>
+                  <td className="py-3 pr-4 text-slate-500">
+                    {q.annee ? `${q.annee}${q.session ? `.${q.session}` : ''}` : '—'}
+                  </td>
                   <td className="py-3 pr-4">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
                       q.type === 'QCM' ? 'bg-violet-100 text-violet-700' : 'bg-orange-100 text-orange-700'
@@ -216,9 +278,7 @@ export default function AdminQuestions() {
                   </td>
                   <td className="py-3 pr-4">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
-                      q.statut === 'publiee'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-slate-100 text-slate-500'
+                      q.statut === 'publiee' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {q.statut === 'publiee' ? 'Publiée' : 'Brouillon'}
                     </span>
