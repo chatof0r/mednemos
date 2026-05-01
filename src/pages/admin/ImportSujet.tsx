@@ -19,102 +19,67 @@ interface ParsedQuestion {
 // ---------------------------------------------------------------------------
 
 function parseSubject(raw: string): ParsedQuestion[] {
-  // ── Pre-normalisation ─────────────────────────────────────────────────────
-  // Insert a newline before every inline item marker so "...text. A. item B. item"
-  // becomes "...text.\nA. item\nB. item" before line-by-line parsing.
+  // ── Approche : split par en-tête de question ─────────────────────────────
   //
-  // Rule (per user spec): any [A-E] immediately followed by ". " is a new item,
-  // whether it's already on its own line or embedded inline after other text.
+  // On divise le texte entier sur les marqueurs QCM/QRU sans jamais dépendre
+  // des sauts de ligne. Chaque bloc obtenu est ensuite découpé en énoncé +
+  // items en cherchant les marqueurs "X. " (lettre A-E + point + espace).
   //
-  // Strategy: replace any run of spaces/tabs that precedes "[A-E]. " with a newline.
-  // "talus. A. text" → "talus.\nA. text"
-  // "pied : A. text" → "pied :\nA. text"
-  // Already at start of line (no leading spaces): left untouched.
-  const normalized = raw
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    // " A. " / " B. " etc. → "\nA. " / "\nB. " etc.
-    .replace(/[ \t]+([A-E])\. /g, '\n$1. ')
-    // Edge-case: ".A. " with no space → ".\nA. "
-    .replace(/\.([A-E])\. /g, '.\n$1. ');
+  // Ça gère indifféremment :
+  //   • items déjà sur leurs propres lignes
+  //   • items inline : "QCM 4 : ... A. texte B. texte C. texte"
+  //   • mélange des deux
 
-  const lines = normalized.split('\n').map(l => l.trim());
+  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Question with explicit type prefix: "QCM n°1 : ..." / "QRU 2 : ..."
-  const Q_TYPED = /^(QCM|QRU)\s*(?:n[°o]?\s*)?(\d+)\s*[:.)]?\s*(.*)/i;
-  // Plain numbered question: "n°1 : ..." / "1. ..." / "1) ..."
-  const Q_NUM = /^(?:n[°o]\s*)?(\d+)\s*[:.]\s*(.*)/i;
-  // Item line: "[A-E]. " (period specifically, per user spec)
-  const ITEM_RE = /^([A-E])\. (.*)/;
+  // ── 1. Découpage par en-têtes de question ─────────────────────────────────
+  // Regex avec 2 groupes capturants → split produit :
+  // [avant_Q1, type1, num1, corps1, type2, num2, corps2, …]
+  const Q_RE = /(QCM|QRU)\s*(?:n[°o]?\s*)?(\d+)\s*[:.)]?\s*/i;
+  const parts = text.split(Q_RE);
+  // parts[0]           = préambule (ignoré)
+  // parts[3k+1]        = type  (k = 0, 1, 2 …)
+  // parts[3k+2]        = numéro
+  // parts[3k+3]        = corps de la question
 
   const questions: ParsedQuestion[] = [];
-  let cur: ParsedQuestion | null = null;
-  let pendingEnonce: string[] = [];
 
-  const flush = () => {
-    if (!cur) return;
-    const extra = pendingEnonce.join(' ').trim();
-    if (extra) cur.enonce = cur.enonce ? `${cur.enonce} ${extra}` : extra;
-    cur.enonce = cur.enonce.trim();
-    if (cur.enonce || cur.items.length > 0) questions.push(cur);
-    cur = null;
-    pendingEnonce = [];
-  };
+  for (let i = 1; i + 2 < parts.length; i += 3) {
+    const qType  = (parts[i] ?? '').toUpperCase() as 'QCM' | 'QRU';
+    const numero = parseInt(parts[i + 1] ?? '0', 10);
+    const body   = (parts[i + 2] ?? '').trim();
 
-  for (const line of lines) {
-    if (!line) continue;
+    if (isNaN(numero) || numero <= 0) continue;
 
-    // 1. Item line?
-    const im = line.match(ITEM_RE);
-    if (im && cur) {
-      // Flush any pending énoncé lines
-      const extra = pendingEnonce.join(' ').trim();
-      if (extra) { cur.enonce = cur.enonce ? `${cur.enonce} ${extra}` : extra; }
-      pendingEnonce = [];
-      cur.items.push({ label: im[1].toUpperCase(), enonce: im[2].trim(), justification: '' });
-      continue;
-    }
+    // ── 2. Découpage du corps en énoncé + items ────────────────────────────
+    // Un item commence par (espace/newline ou début) + [A-E] + ". "
+    // On insère un sentinelle '\x01' avant chaque marqueur d'item.
+    const sentinel = '\x01';
+    const markedBody = body.replace(
+      /(^|[\s\n])([A-E])\. /g,
+      `$1${sentinel}$2. `
+    );
+    const segments = markedBody.split(sentinel);
 
-    // 2. Typed question header? (QCM / QRU prefix)
-    const qt = line.match(Q_TYPED);
-    if (qt) {
-      flush();
-      cur = {
-        numero: parseInt(qt[2], 10),
-        type: qt[1].toUpperCase() === 'QRU' ? 'QRU' : 'QCM',
-        enonce: qt[3]?.trim() ?? '',
-        items: [],
-      };
-      continue;
-    }
+    // segments[0] = énoncé (tout ce qui précède le premier item)
+    const enonce = segments[0].replace(/\s+/g, ' ').trim();
 
-    // 3. Plain numbered question? (only when not already inside a question's items)
-    if (!cur || cur.items.length === 0) {
-      const qn = line.match(Q_NUM);
-      if (qn) {
-        const num = parseInt(qn[1], 10);
-        // Sanity check: plausible question number
-        if (num >= 1 && num <= 200) {
-          flush();
-          cur = {
-            numero: num,
-            type: 'QCM',
-            enonce: qn[2]?.trim() ?? '',
-            items: [],
-          };
-          continue;
-        }
+    const items: Item[] = [];
+    for (let j = 1; j < segments.length; j++) {
+      const seg = segments[j];
+      const m   = seg.match(/^([A-E])\. ([\s\S]*)/);
+      if (m) {
+        items.push({
+          label        : m[1],
+          enonce       : m[2].replace(/\s+/g, ' ').trim(),
+          justification: '',
+        });
       }
     }
 
-    // 4. Continuation of current énoncé (before first item)
-    if (cur && cur.items.length === 0) {
-      pendingEnonce.push(line);
-    }
-    // Lines after items start are ignored (could be footnotes / page numbers etc.)
+    questions.push({ numero, type: qType, enonce, items });
   }
 
-  flush();
   return questions;
 }
 
