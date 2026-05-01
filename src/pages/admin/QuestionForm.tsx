@@ -111,27 +111,17 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     const parts = importText.split(';').map(s => s.trim()).filter(Boolean);
     if (parts.length < 2) return;
 
-    // Détecte si le dernier élément est une liste de réponses (ex: "ABD", "A B C", "AC")
-    const last = parts[parts.length - 1];
-    const isAnswerKey = /^[A-Ha-h](\s*[A-Ha-h])*$/.test(last);
-
     const enoncePart = parts[0];
-    const itemParts = isAnswerKey ? parts.slice(1, -1) : parts.slice(1);
-    const answerLabels = isAnswerKey
-      ? [...last.toUpperCase().replace(/\s/g, '')].filter(c => ITEM_LABELS.includes(c))
-      : [];
+    const itemParts = parts.slice(1);
 
-    const newItems: Item[] = [];
-    for (let i = 0; i + 1 < itemParts.length; i += 2) {
-      const label = ITEM_LABELS[newItems.length];
-      if (!label) break;
-      newItems.push({ label, enonce: itemParts[i], justification: itemParts[i + 1] });
-    }
+    const newItems: Item[] = itemParts
+      .slice(0, ITEM_LABELS.length)
+      .map((enonce, i) => ({ label: ITEM_LABELS[i], enonce, justification: '' }));
 
     if (newItems.length === 0) return;
     setEnonce(enoncePart);
     setItems(newItems);
-    setReponses(answerLabels);
+    setReponses([]);
     setImportText('');
   };
 
