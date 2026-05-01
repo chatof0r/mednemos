@@ -7,7 +7,7 @@ export const CURRICULUM: Record<Niveau, Record<Sem, string[]>> = {
     S2: ['Appareil Locomoteur', 'Dermatologie', 'Tête et cou', 'Immunologie', 'Biopathologie'],
   },
   D1: {
-    S1: ['Appareil digestif', 'Génétique / Pédiatrie', 'SSH', 'Hormonologie', 'Neurosensoriel'],
+    S1: ['Appareil digestif', 'Génétique / Pédiatrie', 'SSH', 'Hormonologie', 'Neurosensoriel', 'Sémiologie ophtalmique'],
     S2: ['Néphrologie', 'AEM', 'Sémiologie écrite', 'Infectiologie', 'Psychiatrie'],
   },
 };
