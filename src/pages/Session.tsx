@@ -192,20 +192,20 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             Signaler une erreur
           </button>
         ) : (
-          <div className="border border-slate-200 dark:border-white/10 rounded-xl p-3 bg-slate-50 dark:bg-white/3">
-            <p className="text-xs font-medium text-slate-600 dark:text-white/50 mb-2">Remarque sur cette question</p>
+          <div className="border border-black/10 dark:border-white/10 rounded-xl p-3 bg-black/5 dark:bg-white/5">
+            <p className="text-xs font-medium text-slate-700 dark:text-white/50 mb-2">Remarque sur cette question</p>
             <textarea
               value={remarkText}
               onChange={e => setRemarkText(e.target.value)}
               rows={2}
               placeholder="Décris l'erreur ou ta suggestion..."
-              className="w-full text-xs border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-[#e3fe52]/40 resize-none bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/20"
+              className="w-full text-xs border border-black/10 dark:border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-[#e3fe52]/40 resize-none bg-black/30 dark:bg-white/30 text-slate-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40"
             />
             <div className="flex gap-2 mt-2">
               <button
                 onClick={sendRemark}
                 disabled={!remarkText.trim()}
-                className="flex-1 text-xs py-1.5 rounded-lg bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40 text-white dark:text-[#e3fe52] font-medium hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65 disabled:opacity-30 transition-colors"
+                className="flex-1 text-xs py-1.5 rounded-lg bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 dark:border dark:border-[#e3fe52]/40 text-[#0c0c0c] dark:text-[#0c0c0c] font-medium hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65 disabled:opacity-30 transition-colors"
               >
                 {remarkSent ? '✓ Envoyé' : 'Envoyer'}
               </button>
