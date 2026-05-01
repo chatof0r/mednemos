@@ -15,10 +15,11 @@ export default function AdminQuestions() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('questions')
       .select('*')
       .order('created_at', { ascending: false });
+    if (error) console.error('load error:', error);
     setQuestions((data ?? []) as Question[]);
     setLoading(false);
   };
