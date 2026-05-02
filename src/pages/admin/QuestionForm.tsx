@@ -38,6 +38,8 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const [imagePreview, setImagePreview] = useState<string | null>(initial?.image_url ?? null);
   const [importText, setImportText] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [source, setSource] = useState<'annale' | 'ronéo'>(seed?.source ?? 'annale');
+  const [noteCorrection, setNoteCorrection] = useState(initial?.note_correction ?? '');
   const [saving, setSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,15 +153,17 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     niveau,
     matiere,
     cours: cours.length > 0 ? cours : null,
-    annee: annee !== '' ? annee : null,
-    session: session,
-    numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
+    annee: source === 'ronéo' ? null : (annee !== '' ? annee : null),
+    session: source === 'ronéo' ? null : session,
+    numero_officiel: source === 'ronéo' ? null : (numeroOfficiel !== '' ? numeroOfficiel : null),
+    source,
     type,
     enonce: enonce.trim(),
     image_url: uploadedImageUrl,
     items: type === 'QZONE' ? [] : items,
     reponses: type === 'QZONE' ? [] : reponses,
     hotspot: type === 'QZONE' ? hotspot : null,
+    note_correction: noteCorrection.trim() || null,
     statut,
   });
 
@@ -238,10 +242,12 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     created_at: '',
     niveau, matiere,
     cours: cours.length > 0 ? cours : null,
-    annee: annee !== '' ? annee : null,
-    session,
-    numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
+    annee: source === 'ronéo' ? null : (annee !== '' ? annee : null),
+    session: source === 'ronéo' ? null : session,
+    numero_officiel: source === 'ronéo' ? null : (numeroOfficiel !== '' ? numeroOfficiel : null),
+    source,
     type, enonce, image_url: imagePreview, items, reponses, hotspot, statut: 'brouillon',
+    note_correction: noteCorrection.trim() || null,
   };
 
   const getSemLabel = (m: string): string => {
@@ -269,6 +275,31 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Informations</h3>
         <div className="space-y-4">
+
+          {/* Source */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5">Source</label>
+            <div className="flex gap-2">
+              {([
+                { v: 'annale', label: 'Annale' },
+                { v: 'ronéo', label: 'Entraînement Ronéo' },
+              ] as { v: 'annale' | 'ronéo'; label: string }[]).map(s => (
+                <button
+                  key={s.v}
+                  onClick={() => setSource(s.v)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    source === s.v
+                      ? s.v === 'ronéo'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Niveau */}
           <div>
@@ -340,8 +371,8 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
             )}
           </div>
 
-          {/* Année */}
-          <div>
+          {/* Année — masqué pour Ronéo */}
+          {source !== 'ronéo' && <div>
             <label className="block text-xs text-slate-500 mb-1.5">Année *</label>
             <div className="flex flex-wrap gap-2">
               {ANNEES.map(a => (
@@ -358,10 +389,10 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
-          {/* Session — visible quand une année est sélectionnée */}
-          {annee !== '' && (
+          {/* Session — visible quand une année est sélectionnée et pas ronéo */}
+          {source !== 'ronéo' && annee !== '' && (
             <div>
               <label className="block text-xs text-slate-500 mb-1.5">
                 Session
@@ -385,8 +416,8 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
             </div>
           )}
 
-          {/* Référencement officiel */}
-          <div className="border-t border-slate-100 pt-4">
+          {/* Référencement officiel — masqué pour Ronéo */}
+          {source !== 'ronéo' && <div className="border-t border-slate-100 pt-4">
             <label className="block text-xs text-slate-500 mb-1.5">
               Référencement officiel
               <span className="ml-1 text-slate-400 font-normal">(numéro dans le sujet d'origine)</span>
@@ -413,7 +444,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
                 </span>
               )}
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -683,6 +714,22 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
           ))}
         </div>
       </div>}
+
+      {/* ── Note de correction ── */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 className="text-sm font-semibold text-slate-700 mb-1">
+          Note de correction
+          <span className="ml-1 font-normal text-slate-400">(optionnel)</span>
+        </h3>
+        <p className="text-xs text-slate-400 mb-3">Affichée à l'étudiant après validation, quelle que soit sa réponse.</p>
+        <textarea
+          value={noteCorrection}
+          onChange={e => setNoteCorrection(e.target.value)}
+          rows={3}
+          placeholder="Ex : Voir cours du Dr. Martin, diapo 42 — piège classique sur les valvulopathies…"
+          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
+        />
+      </div>
 
       {/* ── Prévisualisation ── */}
       {showPreview && (

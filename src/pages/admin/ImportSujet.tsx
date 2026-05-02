@@ -99,6 +99,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
   const [step, setStep] = useState<Step>('input');
 
   // ── Metadata ──────────────────────────────────────────────────────────────
+  const [source, setSource] = useState<'annale' | 'ronéo'>('annale');
   const [niveau, setNiveau] = useState<'P2' | 'D1'>('P2');
   const [matiere, setMatiere] = useState('');
   const [annee, setAnnee] = useState<number>(ANNEES[0]);
@@ -143,8 +144,9 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
     const rows = parsed.map(q => ({
       niveau,
       matiere,
-      annee,
-      session,
+      source,
+      annee: source === 'ronéo' ? null : annee,
+      session: source === 'ronéo' ? null : session,
       type: q.type,
       enonce: q.enonce,
       items: q.items,
@@ -153,7 +155,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
       image_url: null,
       hotspot: null,
       statut: 'brouillon',
-      numero_officiel: q.numero,
+      numero_officiel: source === 'ronéo' ? null : q.numero,
     }));
 
     const { error } = await supabase.from('questions').insert(rows);
@@ -196,8 +198,30 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
       {/* ── STEP 1 : INPUT ───────────────────────────────────────────────── */}
       {step === 'input' && (
         <div className="space-y-6">
+          {/* Source toggle */}
+          <div className="flex gap-2">
+            {([
+              { v: 'annale', label: 'Annale' },
+              { v: 'ronéo', label: 'Entraînement Ronéo' },
+            ] as { v: 'annale' | 'ronéo'; label: string }[]).map(s => (
+              <button
+                key={s.v}
+                onClick={() => setSource(s.v)}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  source === s.v
+                    ? s.v === 'ronéo'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
           {/* Metadata row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className={`grid gap-4 ${source === 'ronéo' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
             {/* Niveau */}
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Niveau</label>
@@ -218,8 +242,8 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               </div>
             </div>
 
-            {/* Année */}
-            <div>
+            {/* Année — masqué pour Ronéo */}
+            {source !== 'ronéo' && <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Année</label>
               <select
                 value={annee}
@@ -230,10 +254,10 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                   <option key={a} value={a}>{a}</option>
                 ))}
               </select>
-            </div>
+            </div>}
 
-            {/* Session */}
-            <div>
+            {/* Session — masqué pour Ronéo */}
+            {source !== 'ronéo' && <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Session</label>
               <div className="flex gap-1">
                 {([1, 2] as const).map(s => (
@@ -250,7 +274,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
 
             {/* Matière */}
             <div>

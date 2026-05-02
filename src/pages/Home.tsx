@@ -25,6 +25,8 @@ export default function Home() {
   const [selectedCours, setSelectedCours] = useState<string[]>([]);
   const [annees, setAnnees] = useState<number[]>([]);
   const [selectedAnnees, setSelectedAnnees] = useState<number[]>([]);
+  const [hasRoneo, setHasRoneo] = useState(false);
+  const [includeRoneo, setIncludeRoneo] = useState(false);
   const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
   const [totalRows, setTotalRows] = useState(0);
   const [order, setOrder] = useState<Order>('official');
@@ -40,29 +42,39 @@ export default function Home() {
     setSelectedCours([]);
     setAnnees([]);
     setSelectedAnnees([]);
+    setHasRoneo(false);
+    setIncludeRoneo(false);
     setCourseCounts({});
     setTotalRows(0);
 
     supabase
       .from('questions')
-      .select('cours, annee')
+      .select('cours, annee, source')
       .eq('niveau', selectedNiveau)
       .eq('matiere', selectedMatiere)
       .eq('statut', 'publiee')
       .then(({ data }) => {
         const rows = data ?? [];
         const counts: Record<string, number> = {};
-        rows.forEach((r: { cours: string[] | null }) => {
+        rows.forEach((r: { cours: string[] | null; source?: string }) => {
           (r.cours ?? []).forEach(c => {
             counts[c] = (counts[c] ?? 0) + 1;
           });
         });
         setCourseCounts(counts);
         setTotalRows(rows.length);
-        const ys = [...new Set(rows.map((r: { annee: number | null }) => r.annee).filter(Boolean))] as number[];
+        const ys = [...new Set(
+          rows
+            .filter((r: { annee: number | null; source?: string }) => r.source !== 'ronéo')
+            .map((r: { annee: number | null }) => r.annee)
+            .filter(Boolean)
+        )] as number[];
         const sorted = ys.sort((a, b) => b - a);
         setAnnees(sorted);
         setSelectedAnnees(sorted);
+        const roneoCnt = rows.filter((r: { source?: string }) => r.source === 'ronéo').length;
+        setHasRoneo(roneoCnt > 0);
+        setIncludeRoneo(roneoCnt > 0);
       });
   }, [selectedMatiere, selectedNiveau]);
 
@@ -72,6 +84,8 @@ export default function Home() {
     setSelectedCours([]);
     setAnnees([]);
     setSelectedAnnees([]);
+    setHasRoneo(false);
+    setIncludeRoneo(false);
   };
 
   const toggleCours = (c: string) => {
@@ -99,7 +113,20 @@ export default function Home() {
       .order('numero_officiel', { ascending: true });
 
     if (selectedCours.length > 0) query = query.overlaps('cours', selectedCours);
-    if (selectedAnnees.length < annees.length) query = query.in('annee', selectedAnnees);
+
+    // Filtrage source / années
+    const annaleFiltered = selectedAnnees.length < annees.length;
+    if (includeRoneo && annaleFiltered) {
+      // ronéo OU (annales avec filtre d'année)
+      query = query.or(`source.eq.ronéo,annee.in.(${selectedAnnees.join(',')})`);
+    } else if (includeRoneo && !annaleFiltered) {
+      // tout inclus, pas de filtre supplémentaire
+    } else if (!includeRoneo && annaleFiltered) {
+      query = query.in('annee', selectedAnnees);
+    } else {
+      // Pas de ronéo, toutes les années → exclure ronéo si la colonne existe
+      query = query.neq('source', 'ronéo');
+    }
 
     const { data } = await query;
     const questions = (data ?? []) as Question[];
@@ -211,14 +238,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* Step 4 — Années toggle-off */}
-      {selectedMatiere && annees.length > 0 && (
+      {/* Step 4 — Années toggle-off + Ronéo */}
+      {selectedMatiere && (annees.length > 0 || hasRoneo) && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30">
               {coursOptions.length > 0 ? '4' : '3'} · Année
             </p>
-            {!allYearsSelected && (
+            {annees.length > 0 && !allYearsSelected && (
               <button
                 onClick={() => setSelectedAnnees(annees)}
                 className="text-xs text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60 transition-colors underline underline-offset-2"
@@ -239,6 +266,16 @@ export default function Home() {
                 </button>
               );
             })}
+            {hasRoneo && (
+              <button
+                onClick={() => setIncludeRoneo(v => !v)}
+                className={`px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${
+                  includeRoneo ? btnSelected : btnDisabled
+                }`}
+              >
+                Ronéo
+              </button>
+            )}
           </div>
         </div>
       )}

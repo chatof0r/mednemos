@@ -30,6 +30,8 @@ export interface Question {
   hotspot: Hotspot | null;
   statut: 'brouillon' | 'publiee';
   numero_officiel: number | null;
+  source: 'annale' | 'ronéo';
+  note_correction: string | null;
 }
 
 export interface Suggestion {

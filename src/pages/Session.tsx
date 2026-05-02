@@ -38,6 +38,13 @@ function pointInPolygon(px: number, py: number, points: Array<{x: number, y: num
   return inside;
 }
 
+function getQuestionRef(q: Question): string | null {
+  if (q.source === 'ronéo') return null;
+  if (!q.annee) return null;
+  const base = `${q.annee}${q.session ? `.${q.session}` : ''}`;
+  return q.numero_officiel ? `Q${q.numero_officiel} / ${base}` : base;
+}
+
 function zoneHit(q: Question, sel: string[]): boolean | null {
   if (q.type !== 'QZONE' || !q.hotspot || sel.length === 0) return null;
   const [cx, cy] = sel[0].split(',').map(Number);
@@ -173,10 +180,20 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
       </div>
 
       {/* Progress bar */}
-      <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-1 mb-6">
+      <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-1 mb-3">
         <div className="bg-[#e3fe52]/70 dark:bg-[#e3fe52]/50 h-1 rounded-full transition-all"
           style={{ width: `${((index + 1) / total) * 100}%` }} />
       </div>
+
+      {/* Référence officielle */}
+      {(() => {
+        const ref = getQuestionRef(question);
+        return ref ? (
+          <p className="text-xs font-mono text-slate-400 dark:text-white/25 mb-5">{ref}</p>
+        ) : question.source === 'ronéo' ? (
+          <p className="text-xs text-purple-400 dark:text-purple-400/60 mb-5">Entraînement Ronéo</p>
+        ) : <div className="mb-5" />;
+      })()}
 
       {/* Énoncé */}
       <p className="text-slate-800 dark:text-white font-medium leading-relaxed mb-4 whitespace-pre-wrap">{question.enonce}</p>
@@ -379,6 +396,14 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
           );
         })}
       </div>}
+
+      {/* Note de correction — visible après validation */}
+      {validated && question.note_correction && (
+        <div className="mt-4 px-4 py-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl">
+          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Note du correcteur</p>
+          <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">{question.note_correction}</p>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="mt-6 flex flex-col gap-3">

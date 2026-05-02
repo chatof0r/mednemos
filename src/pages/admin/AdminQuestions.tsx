@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Question } from '../../types';
 import QuestionForm from './QuestionForm';
@@ -88,6 +88,17 @@ export default function AdminQuestions() {
   };
 
   const hasFilter = filterNiveau || filterType || filterStatut || filterMatiere || filterCours;
+
+  // Groupes collapsibles — tous fermés par défaut
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = useCallback((key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   const filtered = questions.filter(q => {
     if (filterNiveau && q.niveau !== filterNiveau) return false;
@@ -290,91 +301,107 @@ export default function AdminQuestions() {
           </button>
         </div>
       ) : (
-        <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Question</th>
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Niveau</th>
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Matière</th>
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Cours</th>
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Type</th>
-                <th className="text-left text-xs font-medium text-slate-400 pb-2 pr-4">Statut</th>
-                <th className="text-right text-xs font-medium text-slate-400 pb-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((q, idx) => {
-                const yearKey = q.annee ?? null;
-                const prevYearKey = idx > 0 ? (filtered[idx - 1].annee ?? null) : null;
-                const showSeparator = idx === 0 || yearKey !== prevYearKey;
-                const shortYear = q.annee ? String(q.annee).slice(-2) : '?';
-                const ref = q.numero_officiel
-                  ? `Q${q.numero_officiel} / ${shortYear}${q.session ? `.${q.session}` : ''}`
-                  : q.annee ? `${shortYear}${q.session ? `.${q.session}` : ''}` : '—';
-                return (
-                  <>
-                    {showSeparator && (
-                      <tr key={`sep-${q.id}`}>
-                        <td colSpan={7} className={idx === 0 ? 'pb-1' : 'pt-5 pb-1'}>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-semibold text-slate-400 tracking-wide uppercase whitespace-nowrap">
-                              {yearKey ?? '—'}
-                            </span>
-                            <div className="flex-1 h-px bg-slate-100" />
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    <tr key={q.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3 pr-4">
-                        <span className="text-xs font-mono font-medium text-slate-600">{ref}</span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
-                          q.niveau === 'P2' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'
-                        }`}>{q.niveau}</span>
-                      </td>
-                      <td className="py-3 pr-4 text-slate-700 max-w-[150px] truncate">{q.matiere}</td>
-                      <td className="py-3 pr-4 text-slate-500 max-w-[150px] truncate">{q.cours?.join(', ') ?? '—'}</td>
-                      <td className="py-3 pr-4">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
-                          q.type === 'QCM' ? 'bg-violet-100 text-violet-700' : 'bg-orange-100 text-orange-700'
-                        }`}>{q.type}</span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
-                          q.statut === 'publiee' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                        }`}>
-                          {q.statut === 'publiee' ? 'Publiée' : 'Brouillon'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <button
-                          onClick={() => startEdit(q)}
-                          className="text-slate-400 hover:text-blue-600 transition-colors mr-3"
-                          title="Modifier"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(q.id)}
-                          className="text-slate-400 hover:text-red-500 transition-colors"
-                          title="Supprimer"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="space-y-1">
+          {/* Calcul des groupes depuis `filtered` (ordre déjà trié par DB) */}
+          {(() => {
+            // Build ordered groups
+            type Group = { key: string; label: string; questions: Question[] };
+            const groups: Group[] = [];
+            const seen = new Map<string, number>();
+            for (const q of filtered) {
+              const key = (q.source ?? 'annale') === 'ronéo' ? 'ronéo' : (q.annee ? String(q.annee) : '—');
+              const label = (q.source ?? 'annale') === 'ronéo' ? 'Entraînement Ronéo' : (q.annee ? String(q.annee) : '—');
+              if (!seen.has(key)) { seen.set(key, groups.length); groups.push({ key, label, questions: [] }); }
+              groups[seen.get(key)!].questions.push(q);
+            }
+            return groups.map((group) => {
+              const isOpen = expandedGroups.has(group.key);
+              return (
+                <div key={group.key} className="border border-slate-100 rounded-xl overflow-hidden">
+                  {/* Group header */}
+                  <button
+                    onClick={() => toggleGroup(group.key)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-semibold tracking-wide uppercase ${
+                        group.key === 'ronéo' ? 'text-purple-600' : 'text-slate-500'
+                      }`}>
+                        {group.label}
+                      </span>
+                      <span className="text-xs text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                        {group.questions.length}
+                      </span>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Group rows */}
+                  {isOpen && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm min-w-[600px]">
+                        <tbody>
+                          {group.questions.map(q => {
+                            const shortYear = q.annee ? String(q.annee).slice(-2) : '?';
+                            const ref = q.numero_officiel
+                              ? `Q${q.numero_officiel} / ${shortYear}${q.session ? `.${q.session}` : ''}`
+                              : q.annee ? `${shortYear}${q.session ? `.${q.session}` : ''}` : '—';
+                            return (
+                              <tr key={q.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
+                                <td className="py-2.5 pl-4 pr-3">
+                                  <span className="text-xs font-mono font-medium text-slate-500">{ref}</span>
+                                </td>
+                                <td className="py-2.5 pr-3">
+                                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                                    q.niveau === 'P2' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'
+                                  }`}>{q.niveau}</span>
+                                </td>
+                                <td className="py-2.5 pr-3 text-slate-700 max-w-[140px] truncate text-xs">{q.matiere}</td>
+                                <td className="py-2.5 pr-3 text-slate-500 max-w-[140px] truncate text-xs">{q.cours?.join(', ') ?? '—'}</td>
+                                <td className="py-2.5 pr-3">
+                                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                                    q.type === 'QCM' ? 'bg-violet-100 text-violet-700'
+                                      : q.type === 'QZONE' ? 'bg-teal-100 text-teal-700'
+                                        : 'bg-orange-100 text-orange-700'
+                                  }`}>{q.type}</span>
+                                </td>
+                                <td className="py-2.5 pr-3">
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
+                                    q.statut === 'publiee' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                                  }`}>
+                                    {q.statut === 'publiee' ? 'Publiée' : 'Brouillon'}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 pr-4 text-right">
+                                  <button onClick={() => startEdit(q)}
+                                    className="text-slate-400 hover:text-blue-600 transition-colors mr-3" title="Modifier">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                  <button onClick={() => handleDelete(q.id)}
+                                    className="text-slate-400 hover:text-red-500 transition-colors" title="Supprimer">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
     </div>
