@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminQuestions from './admin/AdminQuestions';
 import AdminSuggestions from './admin/AdminSuggestions';
+import AdminDossiers from './admin/AdminDossiers';
 
-type Tab = 'questions' | 'suggestions';
+type Tab = 'questions' | 'dossiers' | 'suggestions';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export default function Admin() {
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-8 w-fit">
         {([
           { key: 'questions', label: 'Questions' },
+          { key: 'dossiers', label: 'Dossiers' },
           { key: 'suggestions', label: 'Suggestions' },
         ] as { key: Tab; label: string }[]).map(t => (
           <button
@@ -64,6 +66,7 @@ export default function Admin() {
       {/* Content */}
       <div>
         {tab === 'questions' && <AdminQuestions />}
+        {tab === 'dossiers' && <AdminDossiers />}
         {tab === 'suggestions' && <AdminSuggestions />}
       </div>
     </div>

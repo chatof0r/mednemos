@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { CURRICULUM, COURSES, Niveau, Sem } from '../lib/curriculum';
-import { Question } from '../types';
+import { Question, Dossier } from '../types';
 
 type Order = 'official' | 'random';
 
@@ -136,7 +136,16 @@ export default function Home() {
       setLaunching(false);
       return;
     }
-    navigate('/session', { state: { questions, order } });
+
+    // Récupérer les métadonnées des dossiers référencés
+    const dossierIds = [...new Set(questions.map(q => q.dossier_id).filter(Boolean))] as string[];
+    let dossiers: Dossier[] = [];
+    if (dossierIds.length > 0) {
+      const { data: dossierData } = await supabase.from('dossiers').select('*').in('id', dossierIds);
+      dossiers = (dossierData ?? []) as Dossier[];
+    }
+
+    navigate('/session', { state: { questions, dossiers, order } });
   };
 
   const matieres = selectedNiveau ? getDisplayedMatieres(selectedNiveau) : [];

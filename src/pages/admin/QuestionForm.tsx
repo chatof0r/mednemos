@@ -248,6 +248,8 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     source,
     type, enonce, image_url: imagePreview, items, reponses, hotspot, statut: 'brouillon',
     note_correction: noteCorrection.trim() || null,
+    dossier_id: null,
+    ordre_dossier: null,
   };
 
   const getSemLabel = (m: string): string => {

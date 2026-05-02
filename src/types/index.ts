@@ -32,6 +32,24 @@ export interface Question {
   numero_officiel: number | null;
   source: 'annale' | 'ronéo';
   note_correction: string | null;
+  dossier_id: string | null;
+  ordre_dossier: number | null;
+}
+
+export interface Dossier {
+  id: string;
+  created_at: string;
+  titre: string;
+  enonce: string | null;
+  image_url: string | null;
+  niveau: 'P2' | 'D1';
+  matiere: string;
+  cours: string[] | null;
+  annee: number | null;
+  session: 1 | 2 | null;
+  source: 'annale' | 'ronéo';
+  statut: 'brouillon' | 'publiee';
+  numero_officiel: number | null;
 }
 
 export interface Suggestion {
@@ -43,6 +61,7 @@ export interface Suggestion {
 
 export interface SessionConfig {
   questions: Question[];
+  dossiers: Dossier[];
   order: 'official' | 'random';
 }
 
