@@ -43,6 +43,24 @@ export const COURSES: Record<string, string[]> = {
     'Séméiologie rhumatologie - os',
   ],
 
+  'Dermatologie': [
+    'ED) Synthèse et Mise en situation',
+    'Sémio Chir tumeurs cutanés/cicatrisation',
+    'Sémio Macules modifiant couleur + Lésions contenu liquidien',
+    'Sémio peau enfant puis Sémio des phanères et muqueuses',
+    'Physio Pigmentation et Pharmacologie',
+    'Examens complémentaires (S)',
+    'Examens complémentaires (A)',
+    'Anapath 1',
+    'ED Debriefing histo',
+    'Semio examen clinique introduction',
+    'E-learning HISTO',
+    'Sémio lésions squameuses/kératosiques + Lésions modifiant consistance peau',
+    'Sémio: Lésions modifiant le relief de la peau + perte substance',
+    'Chirurgie tumeurs cutanées / cicatrisation',
+    'Anapath 2',
+  ],
+
   'Tête et cou': [
     'Histologie organe des sens',
     'Biophysique et physiologie de l\'audition',
