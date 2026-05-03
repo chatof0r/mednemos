@@ -37,6 +37,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initial?.image_url ?? null);
   const [importText, setImportText] = useState('');
+  const [importMode, setImportMode] = useState<'avec' | 'sans'>('avec');
   const [showPreview, setShowPreview] = useState(false);
   const [source, setSource] = useState<'annale' | 'ronéo'>(seed?.source ?? 'annale');
   const [noteCorrection, setNoteCorrection] = useState(initial?.note_correction ?? '');
@@ -119,16 +120,37 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     if (parts.length < 2) return;
 
     const enoncePart = parts[0];
-    const itemParts = parts.slice(1);
 
-    const newItems: Item[] = itemParts
-      .slice(0, ITEM_LABELS.length)
-      .map((enonce, i) => ({ label: ITEM_LABELS[i], enonce, justification: '' }));
+    // Détecter si le dernier segment est une liste de réponses (ex: "ABD", "A", "ABCDE")
+    const lastPart = parts[parts.length - 1];
+    const isLastReponses = /^[A-E]+$/i.test(lastPart);
+    const contentParts = isLastReponses ? parts.slice(1, -1) : parts.slice(1);
+    const detectedReponses = isLastReponses
+      ? [...new Set(lastPart.toUpperCase().split('').filter(c => ITEM_LABELS.includes(c)))]
+      : [];
+
+    let newItems: Item[];
+    if (importMode === 'avec') {
+      // Format : Énoncé ; Item A ; Correction A ; Item B ; Correction B ; ... ; [ABD]
+      // → paires alternées (énoncé item, justification)
+      newItems = [];
+      for (let i = 0; i < contentParts.length && newItems.length < ITEM_LABELS.length; i += 2) {
+        const itemEnonce = contentParts[i] ?? '';
+        const justification = contentParts[i + 1] ?? '';
+        if (itemEnonce) newItems.push({ label: ITEM_LABELS[newItems.length], enonce: itemEnonce, justification });
+      }
+    } else {
+      // Format : Énoncé ; Item A ; Item B ; Item C ; ... ; [ABD]
+      // → chaque segment = un item, pas de justification
+      newItems = contentParts
+        .slice(0, ITEM_LABELS.length)
+        .map((e, i) => ({ label: ITEM_LABELS[i], enonce: e, justification: '' }));
+    }
 
     if (newItems.length === 0) return;
     setEnonce(enoncePart);
     setItems(newItems);
-    setReponses([]);
+    setReponses(type === 'QRU' ? detectedReponses.slice(0, 1) : detectedReponses);
     setImportText('');
   };
 
@@ -633,14 +655,42 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
             ))}
           </div>
         </div>
+
+        {/* Toggle avec / sans corrections */}
+        <div className="flex gap-1.5 mb-3">
+          {([
+            { v: 'avec', label: 'Avec corrections' },
+            { v: 'sans', label: 'Sans corrections' },
+          ] as { v: 'avec' | 'sans'; label: string }[]).map(m => (
+            <button
+              key={m.v}
+              onClick={() => setImportMode(m.v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                importMode === m.v
+                  ? 'border-blue-400 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 text-slate-500 hover:border-slate-300'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
         <p className="text-xs text-slate-400 mb-2">
-          Format : <span className="font-mono text-slate-500">Énoncé ; Item A ; Correction A ; ... ; ABD</span>
+          {importMode === 'avec'
+            ? <>Format : <span className="font-mono text-slate-500">Énoncé ; Item A ; Correction A ; Item B ; Correction B ; ... ; ABD</span></>
+            : <>Format : <span className="font-mono text-slate-500">Énoncé ; Item A ; Item B ; Item C ; Item D ; Item E ; ABD</span></>
+          }
+          <span className="ml-1 text-slate-400">— les réponses en fin sont détectées automatiquement</span>
         </p>
         <textarea
           value={importText}
           onChange={e => setImportText(e.target.value)}
           rows={4}
-          placeholder="Énoncé de la question ; Item A ; Correction A ; Item B ; Correction B ; Item C ; Correction C ; Item D ; Correction D ; Item E ; Correction E ; ABCDE"
+          placeholder={importMode === 'avec'
+            ? 'Énoncé ; Item A ; Correction A ; Item B ; Correction B ; Item C ; Correction C ; Item D ; Correction D ; Item E ; Correction E ; ABCDE'
+            : 'Énoncé ; Item A ; Item B ; Item C ; Item D ; Item E ; ABCDE'
+          }
           className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none mb-3"
         />
         <button
