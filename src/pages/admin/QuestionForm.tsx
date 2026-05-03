@@ -215,7 +215,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const validate = () => {
     if (!matiere) return 'Sélectionnez une matière.';
     if (cours.length === 0) return 'Sélectionnez au moins un cours.';
-    if (!annee) return 'Sélectionnez une année.';
+    if (source !== 'ronéo' && !annee) return 'Sélectionnez une année.';
     if (!enonce.trim()) return "L'énoncé est requis.";
     if (type === 'QZONE') {
       if (!imagePreview) return 'Une image est requise pour une question QZONE.';
