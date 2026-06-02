@@ -12,75 +12,194 @@ interface ParsedQuestion {
   type: 'QCM' | 'QRU';
   enonce: string;
   items: Item[];
+  reponses: string[];       // lettres correctes (☑)
+  noteCorrection: string;   // commentaire de correction
 }
 
 // ---------------------------------------------------------------------------
-// Parser
+// Parser — format "prof" : Question N Pondération 1 + ☑ / ■
 // ---------------------------------------------------------------------------
 
-function parseSubject(raw: string): ParsedQuestion[] {
-  // ── Approche : split par en-tête de question ─────────────────────────────
-  //
-  // On divise le texte entier sur les marqueurs QCM/QRU sans jamais dépendre
-  // des sauts de ligne. Chaque bloc obtenu est ensuite découpé en énoncé +
-  // items en cherchant les marqueurs "X. " (lettre A-E + point + espace).
-  //
-  // Ça gère indifféremment :
-  //   • items déjà sur leurs propres lignes
-  //   • items inline : "QCM 4 : ... A. texte B. texte C. texte"
-  //   • mélange des deux
+function parseProfFormat(raw: string): ParsedQuestion[] {
+  let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+  // ── Normalisation des mots coupés par retour à la ligne ───────────────────
+  text = text
+    .replace(/Question\s+à\s+réponses?\s*\n\s*multiples?/gi, 'TYPE_QCM')
+    .replace(/Question\s+à\s+réponse\s*\n\s*unique/gi,       'TYPE_QRU')
+    .replace(/Question\s+à\s+réponses?\s+multiples?/gi,       'TYPE_QCM')
+    .replace(/Question\s+à\s+réponse\s+unique/gi,             'TYPE_QRU')
+    .replace(/Réponse\s*\n\s*attendue/gi,   'RÉPONSE_ATTENDUE')
+    .replace(/Réponse\s+attendue/gi,        'RÉPONSE_ATTENDUE')
+    .replace(/\d+\/\d+/g, '')              // numéros de page  1/22
+    .replace(/[ \t]+/g, ' ');             // espaces horizontaux
+
+  // ── Repérage des en-têtes de questions ────────────────────────────────────
+  const Q_RE = /[ \t]*Question\s+(\d+)\s+Pondération\s+\d+/g;
+  const qMatches = [...text.matchAll(Q_RE)];
+  if (qMatches.length === 0) return [];
+
+  const questions: ParsedQuestion[] = [];
+
+  for (let i = 0; i < qMatches.length; i++) {
+    const qm = qMatches[i];
+    const numero = parseInt(qm[1], 10);
+    const blockStart = qm.index! + qm[0].length;
+    const blockEnd   = i + 1 < qMatches.length ? qMatches[i + 1].index! : text.length;
+    const block      = text.slice(blockStart, blockEnd);
+
+    // ── Type ─────────────────────────────────────────────────────────────────
+    const type: 'QCM' | 'QRU' = /TYPE_QRU/.test(block) ? 'QRU' : 'QCM';
+
+    // ── Séparation enoncé / items (après "RÉPONSE_ATTENDUE") ─────────────────
+    const repIdx = block.indexOf('RÉPONSE_ATTENDUE');
+    let enoncePart: string;
+    let afterPart:  string;
+
+    if (repIdx !== -1) {
+      enoncePart = block.slice(0, repIdx);
+      afterPart  = block.slice(repIdx + 'RÉPONSE_ATTENDUE'.length);
+    } else {
+      // Fallback : premier item comme délimiteur
+      const firstItem = block.match(/\n?([A-H])\s*(☑|■)/);
+      if (firstItem?.index !== undefined) {
+        enoncePart = block.slice(0, firstItem.index);
+        afterPart  = block.slice(firstItem.index);
+      } else {
+        enoncePart = block;
+        afterPart  = '';
+      }
+    }
+
+    // ── Nettoyage de l'énoncé ────────────────────────────────────────────────
+    const enonce = enoncePart
+      .replace(/TYPE_QCM|TYPE_QRU/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    // ── Séparation items / commentaire de correction ──────────────────────────
+    const COMMENT_MARKER = 'Commentaire de correction de la question';
+    const corrIdx = afterPart.indexOf(COMMENT_MARKER);
+    let itemsPart:   string;
+    let commentPart: string;
+
+    if (corrIdx !== -1) {
+      itemsPart   = afterPart.slice(0, corrIdx);
+      commentPart = afterPart.slice(corrIdx + COMMENT_MARKER.length);
+    } else {
+      itemsPart   = afterPart;
+      commentPart = '';
+    }
+
+    // ── Parsing des items (repérés par lettre + ☑/■) ─────────────────────────
+    const itemRe = /([A-H])\s*(☑|■)\s*/g;
+    const itemMatches = [...itemsPart.matchAll(itemRe)];
+
+    const items:    Item[]    = [];
+    const reponses: string[]  = [];
+
+    for (let j = 0; j < itemMatches.length; j++) {
+      const im       = itemMatches[j];
+      const label    = im[1];
+      const correct  = im[2] === '☑';
+      const txtStart = im.index! + im[0].length;
+      const txtEnd   = j + 1 < itemMatches.length ? itemMatches[j + 1].index! : itemsPart.length;
+
+      const itemEnonce = itemsPart.slice(txtStart, txtEnd)
+        .replace(/TYPE_QCM|TYPE_QRU/g, '')
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      items.push({ label, enonce: itemEnonce, justification: '' });
+      if (correct) reponses.push(label);
+    }
+
+    // ── Parsing du commentaire de correction ──────────────────────────────────
+    // Format attendu : "LETTRE texte justificatif" (une ligne par lettre)
+    // Le reste devient la note globale.
+    const noteLines: string[] = [];
+
+    if (commentPart.trim()) {
+      const lines = commentPart.split('\n').map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        const m = line.match(/^([A-H])\s+(.+)/);
+        if (m) {
+          const itemLabel = m[1];
+          const justif    = m[2].trim();
+          const item = items.find(it => it.label === itemLabel);
+          if (item) item.justification = justif;
+          noteLines.push(`${itemLabel} : ${justif}`);
+        } else {
+          noteLines.push(line);
+        }
+      }
+    }
+
+    questions.push({
+      numero,
+      type,
+      enonce,
+      items,
+      reponses,
+      noteCorrection: noteLines.join('\n'),
+    });
+  }
+
+  return questions;
+}
+
+// ---------------------------------------------------------------------------
+// Parser — format "ancien" : QCM n°1 : ... A. item B. item
+// ---------------------------------------------------------------------------
+
+function parseOldFormat(raw: string): ParsedQuestion[] {
   const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // ── 1. Découpage par en-têtes de question ─────────────────────────────────
-  // Regex avec 2 groupes capturants → split produit :
-  // [avant_Q1, type1, num1, corps1, type2, num2, corps2, …]
   const Q_RE = /(QCM|QRU)\s*(?:n[°o]?\s*)?(\d+)\s*[:.)]?\s*/i;
   const parts = text.split(Q_RE);
-  // parts[0]           = préambule (ignoré)
-  // parts[3k+1]        = type  (k = 0, 1, 2 …)
-  // parts[3k+2]        = numéro
-  // parts[3k+3]        = corps de la question
-
   const questions: ParsedQuestion[] = [];
 
   for (let i = 1; i + 2 < parts.length; i += 3) {
     const qType  = (parts[i] ?? '').toUpperCase() as 'QCM' | 'QRU';
     const numero = parseInt(parts[i + 1] ?? '0', 10);
     const body   = (parts[i + 2] ?? '').trim();
-
     if (isNaN(numero) || numero <= 0) continue;
 
-    // ── 2. Découpage du corps en énoncé + items ────────────────────────────
-    // Un item commence par (espace/newline ou début) + [A-E] + ". "
-    // On insère un sentinelle '\x01' avant chaque marqueur d'item.
-    const sentinel = '\x01';
-    const markedBody = body.replace(
-      /(^|[\s\n])([A-E])\. /g,
-      `$1${sentinel}$2. `
-    );
-    const segments = markedBody.split(sentinel);
+    const sentinel   = '\x01';
+    const markedBody = body.replace(/(^|[\s\n])([A-H])\. /g, `$1${sentinel}$2. `);
+    const segments   = markedBody.split(sentinel);
 
-    // segments[0] = énoncé (tout ce qui précède le premier item)
-    const enonce = segments[0].replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    const enonce = segments[0]
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
 
     const items: Item[] = [];
     for (let j = 1; j < segments.length; j++) {
-      const seg = segments[j];
-      const m   = seg.match(/^([A-E])\. ([\s\S]*)/);
+      const m = segments[j].match(/^([A-H])\. ([\s\S]*)/);
       if (m) {
         items.push({
-          label        : m[1],
-          enonce       : m[2].replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim(),
+          label:         m[1],
+          enonce:        m[2].replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim(),
           justification: '',
         });
       }
     }
 
-    questions.push({ numero, type: qType, enonce, items });
+    questions.push({ numero, type: qType, enonce, items, reponses: [], noteCorrection: '' });
   }
 
   return questions;
+}
+
+// ---------------------------------------------------------------------------
+// Détection automatique du format et dispatch
+// ---------------------------------------------------------------------------
+
+function parseSubject(raw: string): ParsedQuestion[] {
+  const isProfFormat = /Question\s+\d+\s+Pondération/i.test(raw);
+  return isProfFormat ? parseProfFormat(raw) : parseOldFormat(raw);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,40 +214,24 @@ interface Props {
 type Step = 'input' | 'preview';
 
 export default function ImportSujet({ onDone, onCancel }: Props) {
-  // ── Step ──────────────────────────────────────────────────────────────────
-  const [step, setStep] = useState<Step>('input');
-
-  // ── Metadata ──────────────────────────────────────────────────────────────
+  const [step, setStep]     = useState<Step>('input');
   const [source, setSource] = useState<'annale' | 'ronéo'>('annale');
   const [niveau, setNiveau] = useState<'P2' | 'D1'>('P2');
   const [matiere, setMatiere] = useState('');
-  const [annee, setAnnee] = useState<number>(ANNEES[0]);
+  const [annee, setAnnee]   = useState<number>(ANNEES[0]);
   const [session, setSession] = useState<1 | 2>(1);
-
-  // ── Raw text ──────────────────────────────────────────────────────────────
-  const [text, setText] = useState('');
-
-  // ── Parsed questions (step preview) ───────────────────────────────────────
+  const [text, setText]     = useState('');
   const [parsed, setParsed] = useState<ParsedQuestion[]>([]);
-
-  // ── Save state ────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-
   const canParse = text.trim().length > 0 && matiere !== '';
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
-  const handleNiveauChange = (n: 'P2' | 'D1') => {
-    setNiveau(n);
-    setMatiere('');
-  };
+  const handleNiveauChange = (n: 'P2' | 'D1') => { setNiveau(n); setMatiere(''); };
 
   const handleParse = () => {
-    const result = parseSubject(text);
-    setParsed(result);
+    setParsed(parseSubject(text));
     setStep('preview');
   };
 
@@ -138,7 +241,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
     ));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (statut: 'brouillon' | 'publiee') => {
     setSaving(true);
     setSaveProgress(0);
     setSaveError(null);
@@ -150,28 +253,28 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           niveau,
           matiere,
           source,
-          annee: source === 'ronéo' ? null : annee,
-          session: source === 'ronéo' ? null : session,
-          type: q.type,
-          enonce: q.enonce,
-          items: q.items,
-          reponses: [],
-          cours: null,
-          image_url: null,
-          hotspot: null,
-          statut: 'brouillon' as const,
-          numero_officiel: source === 'ronéo' ? null : q.numero,
+          annee:            source === 'ronéo' ? null : annee,
+          session:          source === 'ronéo' ? null : session,
+          type:             q.type,
+          enonce:           q.enonce,
+          items:            q.items,
+          reponses:         q.reponses,
+          note_correction:  q.noteCorrection || null,
+          cours:            null,
+          image_url:        null,
+          hotspot:          null,
+          statut,
+          numero_officiel:  source === 'ronéo' ? null : q.numero,
         }).select().single();
         if (error) {
           setSaving(false);
-          setSaveError(`Q${i + 1} returned: ${error.message} (code: ${error.code})`);
+          setSaveError(`Q${i + 1} : ${error.message}`);
           return;
         }
       } catch (e: unknown) {
         setSaving(false);
         const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-        console.error(`ImportSujet Q${i + 1} threw:`, e);
-        setSaveError(`Q${i + 1} threw: ${msg}`);
+        setSaveError(`Q${i + 1} : ${msg}`);
         return;
       }
       setSaveProgress(i + 1);
@@ -181,13 +284,14 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
     onDone(parsed.length);
   };
 
-  // ── Derived stats for preview ─────────────────────────────────────────────
-  const warnings = parsed.filter(q => q.items.length === 0).length;
+  // Stats preview
+  const warnings       = parsed.filter(q => q.items.length === 0).length;
+  const withCorrections = parsed.filter(q => q.reponses.length > 0).length;
+  const hasCorrections  = withCorrections > 0;
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Back button + title */}
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={step === 'preview' ? () => setStep('input') : onCancel}
@@ -202,106 +306,78 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           <p className="text-xs text-slate-400 mt-0.5">
             {step === 'input'
               ? 'Collez un sujet entier — les questions seront détectées automatiquement'
-              : `${parsed.length} question${parsed.length > 1 ? 's' : ''} détectée${parsed.length > 1 ? 's' : ''}`}
+              : `${parsed.length} question${parsed.length > 1 ? 's' : ''} détectée${parsed.length > 1 ? 's' : ''}${hasCorrections ? ` · ${withCorrections} avec corrections` : ''}`}
           </p>
         </div>
       </div>
 
-      {/* ── STEP 1 : INPUT ───────────────────────────────────────────────── */}
+      {/* ── STEP 1 : INPUT ─────────────────────────────────────────────────── */}
       {step === 'input' && (
         <div className="space-y-6">
-          {/* Source toggle */}
+          {/* Source */}
           <div className="flex gap-2">
             {([
               { v: 'annale', label: 'Annale' },
               { v: 'ronéo', label: 'Entraînement Ronéo' },
             ] as { v: 'annale' | 'ronéo'; label: string }[]).map(s => (
-              <button
-                key={s.v}
-                onClick={() => setSource(s.v)}
+              <button key={s.v} onClick={() => setSource(s.v)}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
                   source === s.v
-                    ? s.v === 'ronéo'
-                      ? 'border-purple-500 bg-purple-50 text-purple-700'
-                      : 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                }`}
-              >
+                    ? s.v === 'ronéo' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                 {s.label}
               </button>
             ))}
           </div>
 
-          {/* Metadata row */}
+          {/* Metadata */}
           <div className={`grid gap-4 ${source === 'ronéo' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
-            {/* Niveau */}
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Niveau</label>
               <div className="flex gap-1">
                 {(['P2', 'D1'] as const).map(n => (
-                  <button
-                    key={n}
-                    onClick={() => handleNiveauChange(n)}
+                  <button key={n} onClick={() => handleNiveauChange(n)}
                     className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                      niveau === n
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
+                      niveau === n ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                     {n}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Année — masqué pour Ronéo */}
-            {source !== 'ronéo' && <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Année</label>
-              <select
-                value={annee}
-                onChange={e => setAnnee(Number(e.target.value))}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {ANNEES.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            </div>}
-
-            {/* Session — masqué pour Ronéo */}
-            {source !== 'ronéo' && <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Session</label>
-              <div className="flex gap-1">
-                {([1, 2] as const).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setSession(s)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                      session === s
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    S{s}
-                  </button>
-                ))}
+            {source !== 'ronéo' && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Année</label>
+                <select value={annee} onChange={e => setAnnee(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {ANNEES.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
               </div>
-            </div>}
+            )}
 
-            {/* Matière */}
+            {source !== 'ronéo' && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Session</label>
+                <div className="flex gap-1">
+                  {([1, 2] as const).map(s => (
+                    <button key={s} onClick={() => setSession(s)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        session === s ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                      S{s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Matière</label>
-              <select
-                value={matiere}
-                onChange={e => setMatiere(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={matiere} onChange={e => setMatiere(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">— choisir —</option>
                 {(['S1', 'S2'] as const).map(sem => (
-                  <optgroup key={sem} label={`${sem}`}>
-                    {CURRICULUM[niveau][sem].map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
+                  <optgroup key={sem} label={sem}>
+                    {CURRICULUM[niveau][sem].map(m => <option key={m} value={m}>{m}</option>)}
                   </optgroup>
                 ))}
               </select>
@@ -310,108 +386,105 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
           {/* Textarea */}
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">
-              Texte du sujet
-            </label>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Texte du sujet</label>
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}
               rows={18}
-              placeholder={`Collez le sujet ici. Formats supportés :\n\nQCM n°1 : Concernant l'anatomie de l'oreille :\nA. L'oreille interne contient la cochlée\nB. Le tympan sépare l'oreille externe de l'oreille moyenne\n...\n\nQCM n°2 : À propos de la physiologie...\nA. ...\n...`}
+              placeholder={`Formats supportés :\n\n• Format corrigé (profs) :\nQuestion 1 Pondération 1\nÀ propos du cœur :\nRéponse attendue\nA ☑ Le cœur a 4 cavités\nB ■ Le VD est plus musclé que le VG\n\n• Format QCM/QRU classique :\nQCM n°1 : Concernant l'anatomie...\nA. L'oreille interne contient la cochlée\nB. Le tympan...`}
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
             />
             <p className="text-xs text-slate-400 mt-1">
-              Formats reconnus : <span className="font-mono">QCM n°1 :</span>, <span className="font-mono">QRU n°2 :</span>, <span className="font-mono">1.</span>, <span className="font-mono">n°1 :</span> — Items : <span className="font-mono">A.</span> <span className="font-mono">B)</span> <span className="font-mono">C -</span>
+              Deux formats reconnus : <strong>format corrigé profs</strong> (☑/■, commentaires de correction) et <strong>format QCM/QRU classique</strong>.
             </p>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleParse}
-              disabled={!canParse}
-              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleParse} disabled={!canParse}
+              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
               Analyser le sujet →
             </button>
-            <button
-              onClick={onCancel}
-              className="px-4 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
-            >
+            <button onClick={onCancel} className="px-4 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
               Annuler
             </button>
           </div>
         </div>
       )}
 
-      {/* ── STEP 2 : PREVIEW ─────────────────────────────────────────────── */}
+      {/* ── STEP 2 : PREVIEW ───────────────────────────────────────────────── */}
       {step === 'preview' && (
         <div className="space-y-4">
-          {/* Summary bar */}
+          {/* Summary */}
           <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${
-            warnings > 0
-              ? 'bg-amber-50 border border-amber-200'
-              : 'bg-green-50 border border-green-200'
-          }`}>
+            warnings > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
             <span className={warnings > 0 ? 'text-amber-700' : 'text-green-700'}>
-              <strong>{parsed.length}</strong> question{parsed.length > 1 ? 's' : ''} détectée{parsed.length > 1 ? 's' : ''}
-              {' '}— <strong>{matiere}</strong> · {annee}.S{session} · {niveau}
+              <strong>{parsed.length}</strong> question{parsed.length > 1 ? 's' : ''} — <strong>{matiere}</strong>
+              {source !== 'ronéo' && <> · {annee}.S{session}</>} · {niveau}
+              {hasCorrections && <> · <span className="text-green-600 font-semibold">{withCorrections} avec corrections</span></>}
             </span>
             {warnings > 0 && (
-              <span className="ml-auto text-amber-600 text-xs">
-                ⚠ {warnings} question{warnings > 1 ? 's' : ''} sans item détecté
-              </span>
+              <span className="ml-auto text-amber-600 text-xs">⚠ {warnings} sans item</span>
             )}
           </div>
 
-          {/* Questions list */}
-          <div className="space-y-2">
+          {/* Questions */}
+          <div className="space-y-1.5">
             {parsed.map((q, idx) => (
-              <div
-                key={idx}
-                className={`flex items-start gap-3 px-4 py-3 rounded-xl border transition-colors ${
-                  q.items.length === 0
-                    ? 'bg-amber-50 border-amber-200'
-                    : 'bg-white border-slate-100'
-                }`}
-              >
-                {/* Numero */}
-                <span className="text-xs font-mono font-semibold text-slate-400 pt-0.5 w-6 shrink-0 text-right">
-                  {q.numero ?? idx + 1}
-                </span>
+              <div key={idx}
+                className={`px-4 py-3 rounded-xl border transition-colors ${
+                  q.items.length === 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}>
+                <div className="flex items-start gap-3">
+                  {/* Numéro */}
+                  <span className="text-xs font-mono font-semibold text-slate-400 pt-0.5 w-6 shrink-0 text-right">
+                    {q.numero ?? idx + 1}
+                  </span>
 
-                {/* Enonce + items */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700 leading-snug truncate">
-                    {q.enonce || <em className="text-slate-400">Énoncé vide</em>}
-                  </p>
-                  {q.items.length > 0 ? (
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {q.items.length} item{q.items.length > 1 ? 's' : ''} ·{' '}
-                      {q.items.map(it => it.label).join(', ')}
+                  {/* Contenu */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-700 leading-snug truncate">
+                      {q.enonce || <em className="text-slate-400">Énoncé vide</em>}
                     </p>
-                  ) : (
-                    <p className="text-xs text-amber-500 mt-0.5">Aucun item détecté</p>
-                  )}
-                </div>
+                    {q.items.length > 0 ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        {/* Labels avec couleur selon correct/incorrect */}
+                        <div className="flex gap-1">
+                          {q.items.map(it => (
+                            <span key={it.label}
+                              className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${
+                                q.reponses.includes(it.label)
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}>
+                              {it.label}
+                            </span>
+                          ))}
+                        </div>
+                        {q.reponses.length > 0 && (
+                          <span className="text-xs text-green-600">✓ {q.reponses.join('')}</span>
+                        )}
+                        {q.noteCorrection && (
+                          <span className="text-xs text-blue-500 ml-1">📝</span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-500 mt-0.5">Aucun item détecté</p>
+                    )}
+                  </div>
 
-                {/* Type toggle */}
-                <button
-                  onClick={() => toggleType(idx)}
-                  title="Cliquer pour basculer QCM / QRU"
-                  className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
-                    q.type === 'QCM'
-                      ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
-                      : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                  }`}
-                >
-                  {q.type}
-                </button>
+                  {/* Type toggle */}
+                  <button onClick={() => toggleType(idx)} title="Basculer QCM / QRU"
+                    className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
+                      q.type === 'QCM'
+                        ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}>
+                    {q.type}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Error */}
+          {/* Erreur */}
           {saveError && (
             <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
               Erreur : {saveError}
@@ -420,10 +493,11 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-2">
+            {/* Brouillon */}
             <button
-              onClick={handleSave}
+              onClick={() => handleSave('brouillon')}
               disabled={saving || parsed.length === 0}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>
@@ -433,25 +507,31 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                   </svg>
                   {saveProgress}/{parsed.length}…
                 </>
-              ) : (
-                <>
-                  Enregistrer {parsed.length} question{parsed.length > 1 ? 's' : ''} en brouillon
-                </>
-              )}
+              ) : 'Brouillon'}
             </button>
-            <button
-              onClick={() => setStep('input')}
-              className="px-4 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
-            >
-              ← Modifier le texte
+
+            {/* Publier — uniquement si corrections présentes */}
+            {hasCorrections && (
+              <button
+                onClick={() => handleSave('publiee')}
+                disabled={saving || parsed.length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? `${saveProgress}/${parsed.length}…` : `Publier ${parsed.length} question${parsed.length > 1 ? 's' : ''}`}
+              </button>
+            )}
+
+            <button onClick={() => setStep('input')}
+              className="px-4 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+              ← Modifier
             </button>
           </div>
 
-          {parsed.length > 0 && (
-            <p className="text-xs text-slate-400">
-              Les questions seront enregistrées en brouillon sans cours ni réponse — vous les compléterez une par une ensuite.
-            </p>
-          )}
+          <p className="text-xs text-slate-400">
+            {hasCorrections
+              ? `${withCorrections}/${parsed.length} questions ont des corrections — tu peux publier directement.`
+              : 'Aucune correction détectée — enregistrement en brouillon, à compléter ensuite.'}
+          </p>
         </div>
       )}
     </div>
