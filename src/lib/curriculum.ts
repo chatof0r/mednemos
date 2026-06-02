@@ -17,6 +17,37 @@ export const COURSES: Record<string, string[]> = {
 
   // ── P2 ───────────────────────────────────────────────────────────────────
 
+  'Pneumologie': [
+    'Physiologie : généralités et mécanique ventilatoire',
+    'Physiologie : mécanique ventilatoire et transport des gaz',
+    'Anatomie de la paroi thoracique',
+    'Physiologie : cavités naso-sinusiennes et principes diurnes et nocturnes',
+    'Anatomie des voies aériennes supérieures',
+    'Histologie des voies aériennes conductrices',
+    'Physiologie : échanges gazeux',
+    'Anatomie : bronches, poumons et plèvre',
+    'Physiologie : contrôle de la ventilation',
+    'Explorations fonctionnelles respiratoires (EFR)',
+    'Voies aériennes respiratoires et plèvre (1)',
+    'Anatomie des voies lymphatiques',
+    'Physiopathologie du syndrome d\'apnées obstructives du sommeil',
+    'Voies aériennes respiratoires et plèvre (2)',
+    'Interrogatoire clinique de la toux',
+    'Pharmacologie : antihistaminiques et antitussifs',
+    'Médecine nucléaire : scintigraphie et TEP',
+    'Signes cliniques : expectoration et hémoptysie',
+    'Signes cliniques : douleur thoracique et dyspnée',
+    'Chirurgie ORL, nasale et laryngée',
+    'Signes cliniques : grands syndromes',
+    'Anatomopathologie : pathologies pulmonaires inflammatoires',
+    'Examens complémentaires en pneumologie',
+    'Imagerie : TDM et IRM',
+    'Conditions techniques et repères anatomiques normaux en imagerie',
+    'Pharmacologie : médicaments pour l\'asthme et la BPCO',
+    'Radiologie thoracique',
+    'Pharmacologie : fluidifiants bronchiques',
+  ],
+
   'Appareil Locomoteur': [
     'Anatomie du membre sup',
     'Physiopathologie tissulaire et moléculaire',
