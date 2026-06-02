@@ -62,7 +62,7 @@ function parseSubject(raw: string): ParsedQuestion[] {
     const segments = markedBody.split(sentinel);
 
     // segments[0] = énoncé (tout ce qui précède le premier item)
-    const enonce = segments[0].replace(/\s+/g, ' ').trim();
+    const enonce = segments[0].replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
     const items: Item[] = [];
     for (let j = 1; j < segments.length; j++) {
@@ -71,7 +71,7 @@ function parseSubject(raw: string): ParsedQuestion[] {
       if (m) {
         items.push({
           label        : m[1],
-          enonce       : m[2].replace(/\s+/g, ' ').trim(),
+          enonce       : m[2].replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim(),
           justification: '',
         });
       }
@@ -113,6 +113,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
   // ── Save state ────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -139,33 +140,36 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveProgress(0);
     setSaveError(null);
 
-    const rows = parsed.map(q => ({
-      niveau,
-      matiere,
-      source,
-      annee: source === 'ronéo' ? null : annee,
-      session: source === 'ronéo' ? null : session,
-      type: q.type,
-      enonce: q.enonce,
-      items: q.items,
-      reponses: [],
-      cours: null,
-      image_url: null,
-      hotspot: null,
-      statut: 'brouillon',
-      numero_officiel: source === 'ronéo' ? null : q.numero,
-    }));
-
-    const { error } = await supabase.from('questions').insert(rows);
-    setSaving(false);
-
-    if (error) {
-      setSaveError(error.message);
-      return;
+    for (let i = 0; i < parsed.length; i++) {
+      const q = parsed[i];
+      const { error } = await supabase.from('questions').insert({
+        niveau,
+        matiere,
+        source,
+        annee: source === 'ronéo' ? null : annee,
+        session: source === 'ronéo' ? null : session,
+        type: q.type,
+        enonce: q.enonce,
+        items: q.items,
+        reponses: [],
+        cours: null,
+        image_url: null,
+        hotspot: null,
+        statut: 'brouillon',
+        numero_officiel: source === 'ronéo' ? null : q.numero,
+      });
+      if (error) {
+        setSaving(false);
+        setSaveError(`Q${i + 1} : ${error.message}`);
+        return;
+      }
+      setSaveProgress(i + 1);
     }
 
+    setSaving(false);
     onDone(parsed.length);
   };
 
@@ -419,7 +423,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
-                  Enregistrement…
+                  {saveProgress}/{parsed.length}…
                 </>
               ) : (
                 <>

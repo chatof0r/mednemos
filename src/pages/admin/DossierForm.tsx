@@ -250,43 +250,44 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
         await supabase.from('questions').delete().in('id', removedDbIds);
       }
 
-      // 4. Sauvegarder chaque question (ordre = index du slot)
-      for (let i = 0; i < slots.length; i++) {
-        const slot = slots[i];
-
-        let qImageUrl = slot.imageUrl;
-        if (slot.imageFile) {
+      // 4. Uploader les images de questions en parallèle
+      const imageUrls: (string | null)[] = await Promise.all(
+        slots.map(async (slot, i) => {
+          if (!slot.imageFile) return slot.imageUrl;
           const ext = slot.imageFile.name.split('.').pop();
           const path = `questions/${Date.now()}_${i}.${ext}`;
           const { error: upErr } = await supabase.storage.from('question-images').upload(path, slot.imageFile);
-          if (!upErr) qImageUrl = supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl;
-        }
+          if (upErr) return slot.imageUrl;
+          return supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl;
+        })
+      );
 
-        const qPayload = {
-          dossier_id: savedDossier.id,
-          ordre_dossier: i + 1,
-          niveau,
-          matiere,
-          cours: cours.length > 0 ? cours : null,
-          annee: source === 'ronéo' ? null : (annee !== '' ? annee : null),
-          session: source === 'ronéo' ? null : session,
-          source,
-          type: slot.type,
-          enonce: slot.enonce.trim(),
-          image_url: qImageUrl,
-          items: slot.items,
-          reponses: slot.reponses,
-          hotspot: null,
-          note_correction: slot.noteCorrection.trim() || null,
-          statut,
-          numero_officiel: null,
-        };
+      // 5. Batch upsert de toutes les questions en une seule requête
+      const qPayloads = slots.map((slot, i) => ({
+        ...(slot.dbId ? { id: slot.dbId } : {}),
+        dossier_id: savedDossier.id,
+        ordre_dossier: i + 1,
+        niveau,
+        matiere,
+        cours: cours.length > 0 ? cours : null,
+        annee: source === 'ronéo' ? null : (annee !== '' ? annee : null),
+        session: source === 'ronéo' ? null : session,
+        source,
+        type: slot.type,
+        enonce: slot.enonce.trim(),
+        image_url: imageUrls[i],
+        items: slot.items,
+        reponses: slot.reponses,
+        hotspot: null,
+        note_correction: slot.noteCorrection.trim() || null,
+        statut,
+        numero_officiel: null,
+      }));
 
-        if (slot.dbId) {
-          await supabase.from('questions').update(qPayload).eq('id', slot.dbId);
-        } else {
-          await supabase.from('questions').insert(qPayload);
-        }
+      const CHUNK = 20;
+      for (let c = 0; c < qPayloads.length; c += CHUNK) {
+        const { error: qErr } = await supabase.from('questions').upsert(qPayloads.slice(c, c + CHUNK));
+        if (qErr) throw qErr;
       }
 
       onSaved(savedDossier);
