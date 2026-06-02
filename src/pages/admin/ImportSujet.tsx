@@ -145,25 +145,33 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
     for (let i = 0; i < parsed.length; i++) {
       const q = parsed[i];
-      const { error } = await supabase.from('questions').insert({
-        niveau,
-        matiere,
-        source,
-        annee: source === 'ronéo' ? null : annee,
-        session: source === 'ronéo' ? null : session,
-        type: q.type,
-        enonce: q.enonce,
-        items: q.items,
-        reponses: [],
-        cours: null,
-        image_url: null,
-        hotspot: null,
-        statut: 'brouillon',
-        numero_officiel: source === 'ronéo' ? null : q.numero,
-      }).select();
-      if (error) {
+      try {
+        const { error } = await supabase.from('questions').insert({
+          niveau,
+          matiere,
+          source,
+          annee: source === 'ronéo' ? null : annee,
+          session: source === 'ronéo' ? null : session,
+          type: q.type,
+          enonce: q.enonce,
+          items: q.items,
+          reponses: [],
+          cours: null,
+          image_url: null,
+          hotspot: null,
+          statut: 'brouillon' as const,
+          numero_officiel: source === 'ronéo' ? null : q.numero,
+        }).select().single();
+        if (error) {
+          setSaving(false);
+          setSaveError(`Q${i + 1} returned: ${error.message} (code: ${error.code})`);
+          return;
+        }
+      } catch (e: unknown) {
         setSaving(false);
-        setSaveError(`Q${i + 1} : ${error.message}`);
+        const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        console.error(`ImportSujet Q${i + 1} threw:`, e);
+        setSaveError(`Q${i + 1} threw: ${msg}`);
         return;
       }
       setSaveProgress(i + 1);
