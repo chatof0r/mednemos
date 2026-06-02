@@ -22,6 +22,10 @@ export default function AdminQuestions() {
   const [filterMatiere, setFilterMatiere] = useState<string | null>(null);
   const [filterCours, setFilterCours] = useState<string | null>(null);
 
+  // Selection (bulk delete)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -48,6 +52,35 @@ export default function AdminQuestions() {
     if (!confirm('Supprimer cette question définitivement ?')) return;
     await supabase.from('questions').delete().eq('id', id);
     setQuestions(prev => prev.filter(q => q.id !== id));
+    setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Supprimer les ${selected.size} question${selected.size > 1 ? 's' : ''} sélectionnée${selected.size > 1 ? 's' : ''} définitivement ?`)) return;
+    setBulkDeleting(true);
+    const ids = [...selected];
+    await supabase.from('questions').delete().in('id', ids);
+    setQuestions(prev => prev.filter(q => !selected.has(q.id)));
+    setSelected(new Set());
+    setBulkDeleting(false);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectGroup = (ids: string[]) => {
+    setSelected(prev => {
+      const allIn = ids.every(id => prev.has(id));
+      const n = new Set(prev);
+      if (allIn) ids.forEach(id => n.delete(id));
+      else ids.forEach(id => n.add(id));
+      return n;
+    });
   };
 
   const handleSaved = (q: Question) => {
@@ -85,6 +118,7 @@ export default function AdminQuestions() {
     setFilterStatut(null);
     setFilterMatiere(null);
     setFilterCours(null);
+    setSelected(new Set());
   };
 
   const hasFilter = filterNiveau || filterType || filterStatut || filterMatiere || filterCours;
@@ -302,6 +336,39 @@ export default function AdminQuestions() {
         </div>
       ) : (
         <div className="space-y-1">
+          {/* Barre de sélection */}
+          {selected.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+              <span className="text-sm font-medium text-red-700">
+                {selected.size} question{selected.size > 1 ? 's' : ''} sélectionnée{selected.size > 1 ? 's' : ''}
+              </span>
+              {selected.size < filtered.length && (
+                <button
+                  onClick={() => setSelected(new Set(filtered.map(q => q.id)))}
+                  className="text-xs text-red-500 hover:text-red-700 underline underline-offset-2 transition-colors"
+                >
+                  Tout sélectionner ({filtered.length})
+                </button>
+              )}
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Désélectionner
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="ml-auto flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                {bulkDeleting ? 'Suppression…' : `Supprimer (${selected.size})`}
+              </button>
+            </div>
+          )}
+
           {/* Calcul des groupes depuis `filtered` (ordre déjà trié par DB) */}
           {(() => {
             // Build ordered groups
@@ -319,27 +386,51 @@ export default function AdminQuestions() {
               return (
                 <div key={group.key} className="border border-slate-100 rounded-xl overflow-hidden">
                   {/* Group header */}
-                  <button
-                    onClick={() => toggleGroup(group.key)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xs font-semibold tracking-wide uppercase ${
-                        group.key === 'ronéo' ? 'text-purple-600' : 'text-slate-500'
-                      }`}>
-                        {group.label}
-                      </span>
-                      <span className="text-xs text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
-                        {group.questions.length}
-                      </span>
-                    </div>
-                    <svg
-                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                  <div className="flex items-center bg-slate-50 hover:bg-slate-100 transition-colors">
+                    {/* Checkbox groupe */}
+                    <div
+                      className="pl-3 pr-1 py-2.5 flex items-center cursor-pointer"
+                      onClick={e => { e.stopPropagation(); toggleSelectGroup(group.questions.map(q => q.id)); }}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                        group.questions.every(q => selected.has(q.id))
+                          ? 'bg-red-500 border-red-500'
+                          : group.questions.some(q => selected.has(q.id))
+                            ? 'bg-red-200 border-red-400'
+                            : 'border-slate-300 bg-white'
+                      }`}>
+                        {group.questions.every(q => selected.has(q.id)) && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                        {!group.questions.every(q => selected.has(q.id)) && group.questions.some(q => selected.has(q.id)) && (
+                          <div className="w-2 h-0.5 bg-red-500 rounded" />
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleGroup(group.key)}
+                      className="flex-1 flex items-center justify-between px-2 py-2.5"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-semibold tracking-wide uppercase ${
+                          group.key === 'ronéo' ? 'text-purple-600' : 'text-slate-500'
+                        }`}>
+                          {group.label}
+                        </span>
+                        <span className="text-xs text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+                          {group.questions.length}
+                        </span>
+                      </div>
+                      <svg
+                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
 
                   {/* Group rows */}
                   {isOpen && (
@@ -351,9 +442,27 @@ export default function AdminQuestions() {
                             const ref = q.numero_officiel
                               ? `Q${q.numero_officiel} / ${shortYear}${q.session ? `.${q.session}` : ''}`
                               : q.annee ? `${shortYear}${q.session ? `.${q.session}` : ''}` : '—';
+                            const isSelected = selected.has(q.id);
                             return (
-                              <tr key={q.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
-                                <td className="py-2.5 pl-4 pr-3">
+                              <tr key={q.id} className={`border-t border-slate-100 transition-colors ${isSelected ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}>
+                                {/* Checkbox */}
+                                <td className="py-2.5 pl-3 pr-1 w-8">
+                                  <div
+                                    className="cursor-pointer"
+                                    onClick={() => toggleSelect(q.id)}
+                                  >
+                                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                                      isSelected ? 'bg-red-500 border-red-500' : 'border-slate-300 bg-white hover:border-red-300'
+                                    }`}>
+                                      {isSelected && (
+                                        <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 pl-1 pr-3">
                                   <span className="text-xs font-mono font-medium text-slate-500">{ref}</span>
                                 </td>
                                 <td className="py-2.5 pr-3">
