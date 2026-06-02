@@ -34,14 +34,17 @@ function parseProfFormat(raw: string): ParsedQuestion[] {
 
   // ── Normalisation des mots coupés par retour à la ligne ───────────────────
   text = text
-    .replace(/Question\s+à\s+réponses?\s*\n\s*multiples?/gi, 'TYPE_QCM')
-    .replace(/Question\s+à\s+réponse\s*\n\s*unique/gi,       'TYPE_QRU')
-    .replace(/Question\s+à\s+réponses?\s+multiples?/gi,       'TYPE_QCM')
-    .replace(/Question\s+à\s+réponse\s+unique/gi,             'TYPE_QRU')
-    .replace(/Réponse\s*\n\s*attendue/gi,   'RÉPONSE_ATTENDUE')
-    .replace(/Réponse\s+attendue/gi,        'RÉPONSE_ATTENDUE')
-    .replace(/\d+\/\d+/g, '')              // numéros de page  1/22
-    .replace(/[ \t]+/g, ' ');             // espaces horizontaux
+    // Types de question (toutes variantes de saut de ligne)
+    .replace(/Question\s+à\s+réponses?\s+multiples?/gi, 'TYPE_QCM')
+    .replace(/Question\s+à\s+réponse\s+unique/gi,       'TYPE_QRU')
+    // Séparateurs enoncé / items — "Réponse attendue" et variantes
+    .replace(/Réponse[s]?\s+à\s+cocher[^\n]*/gi, 'RÉPONSE_ATTENDUE')
+    .replace(/Proposition[s]?\s+à\s+cocher[^\n]*/gi, 'RÉPONSE_ATTENDUE')
+    .replace(/Réponse[s]?\s+attendue[s]?/gi,     'RÉPONSE_ATTENDUE')
+    // Numéros de page  (ex : 3/22)
+    .replace(/\b\d+\/\d+\b/g, '')
+    // Espaces horizontaux multiples
+    .replace(/[ \t]+/g, ' ');
 
   // ── Repérage des en-têtes de questions ────────────────────────────────────
   const Q_RE = /[ \t]*Question\s+(\d+)\s+Pondération\s+\d+/g;
@@ -87,14 +90,14 @@ function parseProfFormat(raw: string): ParsedQuestion[] {
       .trim();
 
     // ── Séparation items / commentaire de correction ──────────────────────────
-    const COMMENT_MARKER = 'Commentaire de correction de la question';
-    const corrIdx = afterPart.indexOf(COMMENT_MARKER);
+    // Accepte "Commentaire de correction" avec ou sans "de la question" à la suite
+    const corrMatch = /Commentaire\s+de\s+correction\b/i.exec(afterPart);
     let itemsPart:   string;
     let commentPart: string;
 
-    if (corrIdx !== -1) {
-      itemsPart   = afterPart.slice(0, corrIdx);
-      commentPart = afterPart.slice(corrIdx + COMMENT_MARKER.length);
+    if (corrMatch) {
+      itemsPart   = afterPart.slice(0, corrMatch.index);
+      commentPart = afterPart.slice(corrMatch.index + corrMatch[0].length);
     } else {
       itemsPart   = afterPart;
       commentPart = '';
@@ -114,8 +117,14 @@ function parseProfFormat(raw: string): ParsedQuestion[] {
       const txtStart = im.index! + im[0].length;
       const txtEnd   = j + 1 < itemMatches.length ? itemMatches[j + 1].index! : itemsPart.length;
 
-      const itemEnonce = itemsPart.slice(txtStart, txtEnd)
+      const rawText = itemsPart.slice(txtStart, txtEnd);
+
+      const itemEnonce = rawText
         .replace(/TYPE_QCM|TYPE_QRU/g, '')
+        // Tronquer avant toute ligne qui ressemble à un label de section
+        // (ex: "Question à...", "Réponse...", "Commentaire..." apparus en fin de bloc)
+        .replace(/\n[ \t]*(?:Question|Réponse|Commentaire|RÉPONSE_ATTENDUE)[^\n]*/g, '')
+        // Joindre les lignes et normaliser les espaces
         .replace(/\n/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
