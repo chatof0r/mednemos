@@ -160,7 +160,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
         hotspot: null,
         statut: 'brouillon',
         numero_officiel: source === 'ronéo' ? null : q.numero,
-      });
+      }).select();
       if (error) {
         setSaving(false);
         setSaveError(`Q${i + 1} : ${error.message}`);

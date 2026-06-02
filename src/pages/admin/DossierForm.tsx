@@ -286,7 +286,7 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
 
       const CHUNK = 20;
       for (let c = 0; c < qPayloads.length; c += CHUNK) {
-        const { error: qErr } = await supabase.from('questions').upsert(qPayloads.slice(c, c + CHUNK));
+        const { error: qErr } = await supabase.from('questions').upsert(qPayloads.slice(c, c + CHUNK)).select();
         if (qErr) throw qErr;
       }
 
