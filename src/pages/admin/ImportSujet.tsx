@@ -18,10 +18,10 @@ interface ParsedQuestion {
 
 interface ParsedSection {
   id: string;
-  kind: 'dossier' | 'isolees';
+  /** dp = dossier progressif, dl = dossier libre, isolees = questions individuelles */
+  type: 'dp' | 'dl' | 'isolees';
   titre: string;
   enonce: string;           // contexte clinique
-  typeDossier: 'dp' | 'dl';
   questions: ParsedQuestion[];
 }
 
@@ -226,10 +226,9 @@ function parseSections(raw: string): ParsedSection[] {
     const questions = parseQuestions(raw);
     return [{
       id: 's0',
-      kind: 'isolees',
+      type: 'isolees' as const,
       titre: '',
       enonce: '',
-      typeDossier: 'dp',
       questions,
     }];
   }
@@ -264,10 +263,9 @@ function parseSections(raw: string): ParsedSection[] {
 
     sections.push({
       id: `s${i}`,
-      kind: isDossier ? 'dossier' : 'isolees',
+      type: isDossier ? 'dp' : 'isolees',
       titre: headerText,
       enonce,
-      typeDossier: 'dp',
       questions,
     });
   }
@@ -310,12 +308,8 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
   // ── Toggles ────────────────────────────────────────────────────────────────
 
-  const toggleSectionType = (sectionId: string) => {
-    setSections(prev => prev.map(s =>
-      s.id === sectionId
-        ? { ...s, typeDossier: s.typeDossier === 'dp' ? 'dl' : 'dp' }
-        : s
-    ));
+  const setSectionType = (sectionId: string, type: 'dp' | 'dl' | 'isolees') => {
+    setSections(prev => prev.map(s => s.id === sectionId ? { ...s, type } : s));
   };
 
   const toggleQuestionType = (sectionId: string, qIdx: number) => {
@@ -340,7 +334,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
     let savedCount = 0;
 
     for (const section of sections) {
-      if (section.kind === 'dossier') {
+      if (section.type === 'dp' || section.type === 'dl') {
         // 1. Créer le dossier
         let dossierId: string;
         try {
@@ -358,7 +352,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               source,
               statut,
               numero_officiel: null,
-              type_dossier: section.typeDossier,
+              type_dossier: section.type,
             })
             .select()
             .single();
@@ -462,9 +456,10 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
   const totalQuestions     = sections.reduce((sum, s) => sum + s.questions.length, 0);
   const totalWithCorrections = sections.reduce((sum, s) => sum + s.questions.filter(q => q.reponses.length > 0).length, 0);
   const totalWarnings      = sections.reduce((sum, s) => sum + s.questions.filter(q => q.items.length === 0).length, 0);
-  const hasDossierSections = sections.some(s => s.kind === 'dossier');
+  // Une section "dossier" = type dp ou dl
+  const hasDossierSections = sections.some(s => s.type === 'dp' || s.type === 'dl');
   const hasCorrections     = totalWithCorrections > 0;
-  // (isFlatMode = pas de sections dossier → vue plate)
+  // Mode plat = une seule section isolées (pas de sections dossier détectées)
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -486,7 +481,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
             {step === 'input'
               ? 'Collez un sujet entier — les questions seront détectées automatiquement'
               : hasDossierSections
-                ? `${sections.filter(s => s.kind === 'dossier').length} dossier${sections.filter(s => s.kind === 'dossier').length > 1 ? 's' : ''} · ${totalQuestions} question${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`
+                ? `${sections.filter(s => s.type !== 'isolees').length} dossier${sections.filter(s => s.type !== 'isolees').length > 1 ? 's' : ''} · ${totalQuestions} question${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`
                 : `${totalQuestions} question${totalQuestions > 1 ? 's' : ''} détectée${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`}
           </p>
         </div>
@@ -602,7 +597,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               <strong>{totalQuestions}</strong> question{totalQuestions > 1 ? 's' : ''} — <strong>{matiere}</strong>
               {source !== 'ronéo' && <> · {annee}.S{session}</>} · {niveau}
               {hasDossierSections && (
-                <> · <strong>{sections.filter(s => s.kind === 'dossier').length}</strong> dossier{sections.filter(s => s.kind === 'dossier').length > 1 ? 's' : ''}</>
+                <> · <strong>{sections.filter(s => s.type !== 'isolees').length}</strong> dossier{sections.filter(s => s.type !== 'isolees').length > 1 ? 's' : ''}</>
               )}
               {hasCorrections && <> · <span className="text-green-600 font-semibold">{totalWithCorrections} avec corrections</span></>}
             </span>
@@ -621,33 +616,39 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                 return (
                   <div key={section.id} className="border border-slate-200 rounded-xl overflow-hidden">
                     {/* Section header */}
-                    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
-                      <span className="text-sm font-semibold text-slate-700 flex-1 min-w-0 truncate">
-                        {section.titre}
-                      </span>
-                      <span className="text-xs text-slate-400 shrink-0">
-                        {section.questions.length} question{section.questions.length > 1 ? 's' : ''}
-                        {sectionCorrections > 0 && <span className="text-green-600"> · {sectionCorrections} corrigée{sectionCorrections > 1 ? 's' : ''}</span>}
-                        {sectionWarnings > 0 && <span className="text-amber-500"> · ⚠ {sectionWarnings}</span>}
-                      </span>
-                      {section.kind === 'dossier' && (
-                        <button
-                          onClick={() => toggleSectionType(section.id)}
-                          className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
-                            section.typeDossier === 'dp'
-                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-                          }`}
-                          title="Cliquer pour changer le type"
-                        >
-                          {section.typeDossier === 'dp' ? 'Progressif' : 'Libre'}
-                        </button>
-                      )}
-                      {section.kind === 'isolees' && (
-                        <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">
-                          Isolées
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 border-b border-slate-100">
+                      {/* Titre + stats */}
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold text-slate-700 truncate block">
+                          {section.titre || 'Questions'}
                         </span>
-                      )}
+                        <span className="text-xs text-slate-400">
+                          {section.questions.length} question{section.questions.length > 1 ? 's' : ''}
+                          {sectionCorrections > 0 && <span className="text-green-600"> · {sectionCorrections} corrigée{sectionCorrections > 1 ? 's' : ''}</span>}
+                          {sectionWarnings > 0 && <span className="text-amber-500"> · ⚠ {sectionWarnings}</span>}
+                        </span>
+                      </div>
+
+                      {/* Toggle 3 états : DP / DL / Isolées */}
+                      <div className="flex gap-0.5 bg-slate-200 rounded-lg p-0.5 shrink-0">
+                        {([
+                          { v: 'dp',       label: 'DP',       active: 'bg-amber-100 text-amber-700' },
+                          { v: 'dl',       label: 'DL',       active: 'bg-teal-100 text-teal-700' },
+                          { v: 'isolees',  label: 'Isolées',  active: 'bg-white text-slate-700' },
+                        ] as { v: 'dp' | 'dl' | 'isolees'; label: string; active: string }[]).map(opt => (
+                          <button
+                            key={opt.v}
+                            onClick={() => setSectionType(section.id, opt.v)}
+                            className={`text-xs font-semibold px-2 py-1 rounded-md transition-all ${
+                              section.type === opt.v
+                                ? `${opt.active} shadow-sm`
+                                : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Contexte clinique */}
@@ -805,7 +806,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
           <p className="text-xs text-slate-400">
             {hasDossierSections
-              ? `${sections.filter(s => s.kind === 'dossier').length} dossier${sections.filter(s => s.kind === 'dossier').length > 1 ? 's' : ''} seront créés${sections.some(s => s.kind === 'isolees') ? ' + questions isolées' : ''}.${hasCorrections ? ' Corrections incluses, publication directe possible.' : ''}`
+              ? `${sections.filter(s => s.type !== 'isolees').length} dossier${sections.filter(s => s.type !== 'isolees').length > 1 ? 's' : ''} seront créés${sections.some(s => s.type === 'isolees') ? ' + questions isolées' : ''}.${hasCorrections ? ' Corrections incluses, publication directe possible.' : ''}`
               : hasCorrections
                 ? `${totalWithCorrections}/${totalQuestions} questions ont des corrections — tu peux publier directement.`
                 : 'Aucune correction détectée — enregistrement en brouillon, à compléter ensuite.'}
