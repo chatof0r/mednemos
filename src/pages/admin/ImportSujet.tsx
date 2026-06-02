@@ -16,6 +16,15 @@ interface ParsedQuestion {
   noteCorrection: string;   // commentaire de correction
 }
 
+interface ParsedSection {
+  id: string;
+  kind: 'dossier' | 'isolees';
+  titre: string;
+  enonce: string;           // contexte clinique
+  typeDossier: 'dp' | 'dl';
+  questions: ParsedQuestion[];
+}
+
 // ---------------------------------------------------------------------------
 // Parser — format "prof" : Question N Pondération 1 + ☑ / ■
 // ---------------------------------------------------------------------------
@@ -116,8 +125,6 @@ function parseProfFormat(raw: string): ParsedQuestion[] {
     }
 
     // ── Parsing du commentaire de correction ──────────────────────────────────
-    // Format attendu : "LETTRE texte justificatif" (une ligne par lettre)
-    // Le reste devient la note globale.
     const noteLines: string[] = [];
 
     if (commentPart.trim()) {
@@ -197,9 +204,75 @@ function parseOldFormat(raw: string): ParsedQuestion[] {
 // Détection automatique du format et dispatch
 // ---------------------------------------------------------------------------
 
-function parseSubject(raw: string): ParsedQuestion[] {
+function parseQuestions(raw: string): ParsedQuestion[] {
   const isProfFormat = /Question\s+\d+\s+Pondération/i.test(raw);
   return isProfFormat ? parseProfFormat(raw) : parseOldFormat(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Détection des sections (Dossier N / Questions isolées)
+// ---------------------------------------------------------------------------
+
+function parseSections(raw: string): ParsedSection[] {
+  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Repérer les en-têtes de section : "Dossier N..." ou "Questions isolées..."
+  // Doit être en début de ligne (précédé par newline ou début de texte)
+  const SECTION_RE = /(?:^|\n)(Dossier\s+\d+[^\n]*|Questions?\s+isolées?[^\n]*)\n/gi;
+  const sectionMatches = [...text.matchAll(SECTION_RE)];
+
+  // Pas de sections → flat parse
+  if (sectionMatches.length === 0) {
+    const questions = parseQuestions(raw);
+    return [{
+      id: 's0',
+      kind: 'isolees',
+      titre: '',
+      enonce: '',
+      typeDossier: 'dp',
+      questions,
+    }];
+  }
+
+  const sections: ParsedSection[] = [];
+
+  for (let i = 0; i < sectionMatches.length; i++) {
+    const sm = sectionMatches[i];
+    const headerText = sm[1].trim();
+    const contentStart = sm.index! + sm[0].length;
+    const contentEnd = i + 1 < sectionMatches.length
+      ? sectionMatches[i + 1].index!
+      : text.length;
+    const content = text.slice(contentStart, contentEnd);
+
+    const isDossier = /^Dossier\s+\d+/i.test(headerText);
+
+    // Extraire le contexte clinique : texte avant la première "Question N Pondération"
+    const firstQIdx = content.search(/Question\s+\d+\s+Pondération/i);
+    let enonce = '';
+    let questionsText = content;
+
+    if (firstQIdx !== -1) {
+      enonce = content.slice(0, firstQIdx)
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      questionsText = content.slice(firstQIdx);
+    }
+
+    const questions = parseQuestions(questionsText);
+
+    sections.push({
+      id: `s${i}`,
+      kind: isDossier ? 'dossier' : 'isolees',
+      titre: headerText,
+      enonce,
+      typeDossier: 'dp',
+      questions,
+    });
+  }
+
+  return sections;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,15 +287,15 @@ interface Props {
 type Step = 'input' | 'preview';
 
 export default function ImportSujet({ onDone, onCancel }: Props) {
-  const [step, setStep]     = useState<Step>('input');
-  const [source, setSource] = useState<'annale' | 'ronéo'>('annale');
-  const [niveau, setNiveau] = useState<'P2' | 'D1'>('P2');
+  const [step, setStep]       = useState<Step>('input');
+  const [source, setSource]   = useState<'annale' | 'ronéo'>('annale');
+  const [niveau, setNiveau]   = useState<'P2' | 'D1'>('P2');
   const [matiere, setMatiere] = useState('');
-  const [annee, setAnnee]   = useState<number>(ANNEES[0]);
+  const [annee, setAnnee]     = useState<number>(ANNEES[0]);
   const [session, setSession] = useState<1 | 2>(1);
-  const [text, setText]     = useState('');
-  const [parsed, setParsed] = useState<ParsedQuestion[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [text, setText]       = useState('');
+  const [sections, setSections] = useState<ParsedSection[]>([]);
+  const [saving, setSaving]   = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -231,63 +304,169 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
   const handleNiveauChange = (n: 'P2' | 'D1') => { setNiveau(n); setMatiere(''); };
 
   const handleParse = () => {
-    setParsed(parseSubject(text));
+    setSections(parseSections(text));
     setStep('preview');
   };
 
-  const toggleType = (idx: number) => {
-    setParsed(prev => prev.map((q, i) =>
-      i === idx ? { ...q, type: q.type === 'QCM' ? 'QRU' : 'QCM' } : q
+  // ── Toggles ────────────────────────────────────────────────────────────────
+
+  const toggleSectionType = (sectionId: string) => {
+    setSections(prev => prev.map(s =>
+      s.id === sectionId
+        ? { ...s, typeDossier: s.typeDossier === 'dp' ? 'dl' : 'dp' }
+        : s
     ));
   };
+
+  const toggleQuestionType = (sectionId: string, qIdx: number) => {
+    setSections(prev => prev.map(s => {
+      if (s.id !== sectionId) return s;
+      return {
+        ...s,
+        questions: s.questions.map((q, i) =>
+          i === qIdx ? { ...q, type: q.type === 'QCM' ? 'QRU' : 'QCM' } : q
+        ),
+      };
+    }));
+  };
+
+  // ── Save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async (statut: 'brouillon' | 'publiee') => {
     setSaving(true);
     setSaveProgress(0);
     setSaveError(null);
 
-    for (let i = 0; i < parsed.length; i++) {
-      const q = parsed[i];
-      try {
-        const { error } = await supabase.from('questions').insert({
-          niveau,
-          matiere,
-          source,
-          annee:            source === 'ronéo' ? null : annee,
-          session:          source === 'ronéo' ? null : session,
-          type:             q.type,
-          enonce:           q.enonce,
-          items:            q.items,
-          reponses:         q.reponses,
-          note_correction:  q.noteCorrection || null,
-          cours:            null,
-          image_url:        null,
-          hotspot:          null,
-          statut,
-          numero_officiel:  source === 'ronéo' ? null : q.numero,
-        }).select().single();
-        if (error) {
+    let savedCount = 0;
+
+    for (const section of sections) {
+      if (section.kind === 'dossier') {
+        // 1. Créer le dossier
+        let dossierId: string;
+        try {
+          const { data, error } = await supabase
+            .from('dossiers')
+            .insert({
+              titre: section.titre,
+              enonce: section.enonce || null,
+              image_url: null,
+              niveau,
+              matiere,
+              cours: null,
+              annee: source === 'ronéo' ? null : annee,
+              session: source === 'ronéo' ? null : session,
+              source,
+              statut,
+              numero_officiel: null,
+              type_dossier: section.typeDossier,
+            })
+            .select()
+            .single();
+          if (error) {
+            setSaveError(`Dossier "${section.titre}" : ${error.message}`);
+            setSaving(false);
+            return;
+          }
+          dossierId = (data as { id: string }).id;
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+          setSaveError(`Dossier "${section.titre}" : ${msg}`);
           setSaving(false);
-          setSaveError(`Q${i + 1} : ${error.message}`);
           return;
         }
-      } catch (e: unknown) {
-        setSaving(false);
-        const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-        setSaveError(`Q${i + 1} : ${msg}`);
-        return;
+
+        // 2. Insérer les questions du dossier
+        for (let i = 0; i < section.questions.length; i++) {
+          const q = section.questions[i];
+          try {
+            const { error } = await supabase.from('questions').insert({
+              niveau,
+              matiere,
+              source,
+              annee:           source === 'ronéo' ? null : annee,
+              session:         source === 'ronéo' ? null : session,
+              type:            q.type,
+              enonce:          q.enonce,
+              items:           q.items,
+              reponses:        q.reponses,
+              note_correction: q.noteCorrection || null,
+              cours:           null,
+              image_url:       null,
+              hotspot:         null,
+              statut,
+              numero_officiel: source === 'ronéo' ? null : q.numero,
+              dossier_id:      dossierId,
+              ordre_dossier:   i + 1,
+            }).select().single();
+            if (error) {
+              setSaveError(`${section.titre} Q${i + 1} : ${error.message}`);
+              setSaving(false);
+              return;
+            }
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+            setSaveError(`${section.titre} Q${i + 1} : ${msg}`);
+            setSaving(false);
+            return;
+          }
+          savedCount++;
+          setSaveProgress(savedCount);
+        }
+      } else {
+        // Questions isolées → sans dossier
+        for (let i = 0; i < section.questions.length; i++) {
+          const q = section.questions[i];
+          try {
+            const { error } = await supabase.from('questions').insert({
+              niveau,
+              matiere,
+              source,
+              annee:           source === 'ronéo' ? null : annee,
+              session:         source === 'ronéo' ? null : session,
+              type:            q.type,
+              enonce:          q.enonce,
+              items:           q.items,
+              reponses:        q.reponses,
+              note_correction: q.noteCorrection || null,
+              cours:           null,
+              image_url:       null,
+              hotspot:         null,
+              statut,
+              numero_officiel: source === 'ronéo' ? null : q.numero,
+              dossier_id:      null,
+              ordre_dossier:   null,
+            }).select().single();
+            if (error) {
+              setSaveError(`Q${i + 1} : ${error.message}`);
+              setSaving(false);
+              return;
+            }
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+            setSaveError(`Q${i + 1} : ${msg}`);
+            setSaving(false);
+            return;
+          }
+          savedCount++;
+          setSaveProgress(savedCount);
+        }
       }
-      setSaveProgress(i + 1);
     }
 
     setSaving(false);
-    onDone(parsed.length);
+    onDone(savedCount);
   };
 
-  // Stats preview
-  const warnings       = parsed.filter(q => q.items.length === 0).length;
-  const withCorrections = parsed.filter(q => q.reponses.length > 0).length;
-  const hasCorrections  = withCorrections > 0;
+  // ── Stats ──────────────────────────────────────────────────────────────────
+
+  const totalQuestions     = sections.reduce((sum, s) => sum + s.questions.length, 0);
+  const totalWithCorrections = sections.reduce((sum, s) => sum + s.questions.filter(q => q.reponses.length > 0).length, 0);
+  const totalWarnings      = sections.reduce((sum, s) => sum + s.questions.filter(q => q.items.length === 0).length, 0);
+  const hasDossierSections = sections.some(s => s.kind === 'dossier');
+  const hasCorrections     = totalWithCorrections > 0;
+  // (isFlatMode = pas de sections dossier → vue plate)
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -306,7 +485,9 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           <p className="text-xs text-slate-400 mt-0.5">
             {step === 'input'
               ? 'Collez un sujet entier — les questions seront détectées automatiquement'
-              : `${parsed.length} question${parsed.length > 1 ? 's' : ''} détectée${parsed.length > 1 ? 's' : ''}${hasCorrections ? ` · ${withCorrections} avec corrections` : ''}`}
+              : hasDossierSections
+                ? `${sections.filter(s => s.kind === 'dossier').length} dossier${sections.filter(s => s.kind === 'dossier').length > 1 ? 's' : ''} · ${totalQuestions} question${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`
+                : `${totalQuestions} question${totalQuestions > 1 ? 's' : ''} détectée${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`}
           </p>
         </div>
       </div>
@@ -391,11 +572,11 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               value={text}
               onChange={e => setText(e.target.value)}
               rows={18}
-              placeholder={`Formats supportés :\n\n• Format corrigé (profs) :\nQuestion 1 Pondération 1\nÀ propos du cœur :\nRéponse attendue\nA ☑ Le cœur a 4 cavités\nB ■ Le VD est plus musclé que le VG\n\n• Format QCM/QRU classique :\nQCM n°1 : Concernant l'anatomie...\nA. L'oreille interne contient la cochlée\nB. Le tympan...`}
+              placeholder={`Formats supportés :\n\n• Avec dossiers (Dossier 1 / Dossier 2 / Questions isolées) :\nDossier 1\nContexte clinique…\nQuestion 1 Pondération 1\n…\n\n• Format corrigé (profs) :\nQuestion 1 Pondération 1\nÀ propos du cœur :\nRéponse attendue\nA ☑ Le cœur a 4 cavités\nB ■ Le VD est plus musclé que le VG\n\n• Format QCM/QRU classique :\nQCM n°1 : Concernant l'anatomie...\nA. L'oreille interne contient la cochlée`}
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
             />
             <p className="text-xs text-slate-400 mt-1">
-              Deux formats reconnus : <strong>format corrigé profs</strong> (☑/■, commentaires de correction) et <strong>format QCM/QRU classique</strong>.
+              Formats reconnus : <strong>dossiers progressifs / libres</strong> (avec "Dossier N"), <strong>format corrigé profs</strong> (☑/■) et <strong>QCM/QRU classique</strong>.
             </p>
           </div>
 
@@ -416,73 +597,168 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
         <div className="space-y-4">
           {/* Summary */}
           <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${
-            warnings > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
-            <span className={warnings > 0 ? 'text-amber-700' : 'text-green-700'}>
-              <strong>{parsed.length}</strong> question{parsed.length > 1 ? 's' : ''} — <strong>{matiere}</strong>
+            totalWarnings > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+            <span className={totalWarnings > 0 ? 'text-amber-700' : 'text-green-700'}>
+              <strong>{totalQuestions}</strong> question{totalQuestions > 1 ? 's' : ''} — <strong>{matiere}</strong>
               {source !== 'ronéo' && <> · {annee}.S{session}</>} · {niveau}
-              {hasCorrections && <> · <span className="text-green-600 font-semibold">{withCorrections} avec corrections</span></>}
+              {hasDossierSections && (
+                <> · <strong>{sections.filter(s => s.kind === 'dossier').length}</strong> dossier{sections.filter(s => s.kind === 'dossier').length > 1 ? 's' : ''}</>
+              )}
+              {hasCorrections && <> · <span className="text-green-600 font-semibold">{totalWithCorrections} avec corrections</span></>}
             </span>
-            {warnings > 0 && (
-              <span className="ml-auto text-amber-600 text-xs">⚠ {warnings} sans item</span>
+            {totalWarnings > 0 && (
+              <span className="ml-auto text-amber-600 text-xs">⚠ {totalWarnings} sans item</span>
             )}
           </div>
 
-          {/* Questions */}
-          <div className="space-y-1.5">
-            {parsed.map((q, idx) => (
-              <div key={idx}
-                className={`px-4 py-3 rounded-xl border transition-colors ${
-                  q.items.length === 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}>
-                <div className="flex items-start gap-3">
-                  {/* Numéro */}
-                  <span className="text-xs font-mono font-semibold text-slate-400 pt-0.5 w-6 shrink-0 text-right">
-                    {q.numero ?? idx + 1}
-                  </span>
+          {/* ── Sections avec dossiers ── */}
+          {hasDossierSections ? (
+            <div className="space-y-3">
+              {sections.map(section => {
+                const sectionWarnings = section.questions.filter(q => q.items.length === 0).length;
+                const sectionCorrections = section.questions.filter(q => q.reponses.length > 0).length;
 
-                  {/* Contenu */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-700 leading-snug truncate">
-                      {q.enonce || <em className="text-slate-400">Énoncé vide</em>}
-                    </p>
-                    {q.items.length > 0 ? (
-                      <div className="flex items-center gap-2 mt-1">
-                        {/* Labels avec couleur selon correct/incorrect */}
-                        <div className="flex gap-1">
-                          {q.items.map(it => (
-                            <span key={it.label}
-                              className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${
-                                q.reponses.includes(it.label)
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-slate-100 text-slate-500'
-                              }`}>
-                              {it.label}
-                            </span>
-                          ))}
-                        </div>
-                        {q.reponses.length > 0 && (
-                          <span className="text-xs text-green-600">✓ {q.reponses.join('')}</span>
-                        )}
-                        {q.noteCorrection && (
-                          <span className="text-xs text-blue-500 ml-1">📝</span>
-                        )}
+                return (
+                  <div key={section.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                    {/* Section header */}
+                    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
+                      <span className="text-sm font-semibold text-slate-700 flex-1 min-w-0 truncate">
+                        {section.titre}
+                      </span>
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {section.questions.length} question{section.questions.length > 1 ? 's' : ''}
+                        {sectionCorrections > 0 && <span className="text-green-600"> · {sectionCorrections} corrigée{sectionCorrections > 1 ? 's' : ''}</span>}
+                        {sectionWarnings > 0 && <span className="text-amber-500"> · ⚠ {sectionWarnings}</span>}
+                      </span>
+                      {section.kind === 'dossier' && (
+                        <button
+                          onClick={() => toggleSectionType(section.id)}
+                          className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
+                            section.typeDossier === 'dp'
+                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                          }`}
+                          title="Cliquer pour changer le type"
+                        >
+                          {section.typeDossier === 'dp' ? 'Progressif' : 'Libre'}
+                        </button>
+                      )}
+                      {section.kind === 'isolees' && (
+                        <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">
+                          Isolées
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Contexte clinique */}
+                    {section.enonce && (
+                      <div className="px-4 py-2.5 bg-blue-50/60 border-b border-blue-100 text-xs text-blue-700 leading-relaxed line-clamp-2">
+                        {section.enonce}
                       </div>
-                    ) : (
-                      <p className="text-xs text-amber-500 mt-0.5">Aucun item détecté</p>
                     )}
-                  </div>
 
-                  {/* Type toggle */}
-                  <button onClick={() => toggleType(idx)} title="Basculer QCM / QRU"
-                    className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
-                      q.type === 'QCM'
-                        ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
-                        : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}>
-                    {q.type}
-                  </button>
+                    {/* Questions */}
+                    <div className="divide-y divide-slate-100">
+                      {section.questions.map((q, qIdx) => (
+                        <div key={qIdx} className={`px-4 py-2.5 flex items-start gap-3 ${q.items.length === 0 ? 'bg-amber-50' : ''}`}>
+                          <span className="text-xs font-mono font-semibold text-slate-400 pt-0.5 w-6 shrink-0 text-right">
+                            {q.numero ?? qIdx + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-slate-700 leading-snug truncate">
+                              {q.enonce || <em className="text-slate-400">Énoncé vide</em>}
+                            </p>
+                            {q.items.length > 0 ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex gap-1">
+                                  {q.items.map(it => (
+                                    <span key={it.label}
+                                      className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${
+                                        q.reponses.includes(it.label)
+                                          ? 'bg-green-100 text-green-700'
+                                          : 'bg-slate-100 text-slate-500'
+                                      }`}>
+                                      {it.label}
+                                    </span>
+                                  ))}
+                                </div>
+                                {q.reponses.length > 0 && (
+                                  <span className="text-xs text-green-600">✓ {q.reponses.join('')}</span>
+                                )}
+                                {q.noteCorrection && (
+                                  <span className="text-xs text-blue-500">📝</span>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-amber-500 mt-0.5">Aucun item détecté</p>
+                            )}
+                          </div>
+                          <button onClick={() => toggleQuestionType(section.id, qIdx)} title="Basculer QCM / QRU"
+                            className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
+                              q.type === 'QCM'
+                                ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                                : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}>
+                            {q.type}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* ── Mode plat (pas de dossiers) ── */
+            <div className="space-y-1.5">
+              {sections[0]?.questions.map((q, idx) => (
+                <div key={idx}
+                  className={`px-4 py-3 rounded-xl border transition-colors ${
+                    q.items.length === 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-xs font-mono font-semibold text-slate-400 pt-0.5 w-6 shrink-0 text-right">
+                      {q.numero ?? idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-700 leading-snug truncate">
+                        {q.enonce || <em className="text-slate-400">Énoncé vide</em>}
+                      </p>
+                      {q.items.length > 0 ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex gap-1">
+                            {q.items.map(it => (
+                              <span key={it.label}
+                                className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${
+                                  q.reponses.includes(it.label)
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                {it.label}
+                              </span>
+                            ))}
+                          </div>
+                          {q.reponses.length > 0 && (
+                            <span className="text-xs text-green-600">✓ {q.reponses.join('')}</span>
+                          )}
+                          {q.noteCorrection && (
+                            <span className="text-xs text-blue-500 ml-1">📝</span>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-500 mt-0.5">Aucun item détecté</p>
+                      )}
+                    </div>
+                    <button onClick={() => toggleQuestionType(sections[0].id, idx)} title="Basculer QCM / QRU"
+                      className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
+                        q.type === 'QCM'
+                          ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                          : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}>
+                      {q.type}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Erreur */}
           {saveError && (
@@ -496,7 +772,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
             {/* Brouillon */}
             <button
               onClick={() => handleSave('brouillon')}
-              disabled={saving || parsed.length === 0}
+              disabled={saving || totalQuestions === 0}
               className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving ? (
@@ -505,7 +781,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
-                  {saveProgress}/{parsed.length}…
+                  {saveProgress}/{totalQuestions}…
                 </>
               ) : 'Brouillon'}
             </button>
@@ -514,10 +790,10 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
             {hasCorrections && (
               <button
                 onClick={() => handleSave('publiee')}
-                disabled={saving || parsed.length === 0}
+                disabled={saving || totalQuestions === 0}
                 className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {saving ? `${saveProgress}/${parsed.length}…` : `Publier ${parsed.length} question${parsed.length > 1 ? 's' : ''}`}
+                {saving ? `${saveProgress}/${totalQuestions}…` : `Publier ${totalQuestions} question${totalQuestions > 1 ? 's' : ''}`}
               </button>
             )}
 
@@ -528,9 +804,11 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           </div>
 
           <p className="text-xs text-slate-400">
-            {hasCorrections
-              ? `${withCorrections}/${parsed.length} questions ont des corrections — tu peux publier directement.`
-              : 'Aucune correction détectée — enregistrement en brouillon, à compléter ensuite.'}
+            {hasDossierSections
+              ? `${sections.filter(s => s.kind === 'dossier').length} dossier${sections.filter(s => s.kind === 'dossier').length > 1 ? 's' : ''} seront créés${sections.some(s => s.kind === 'isolees') ? ' + questions isolées' : ''}.${hasCorrections ? ' Corrections incluses, publication directe possible.' : ''}`
+              : hasCorrections
+                ? `${totalWithCorrections}/${totalQuestions} questions ont des corrections — tu peux publier directement.`
+                : 'Aucune correction détectée — enregistrement en brouillon, à compléter ensuite.'}
           </p>
         </div>
       )}

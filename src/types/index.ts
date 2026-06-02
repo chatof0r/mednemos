@@ -50,6 +50,7 @@ export interface Dossier {
   source: 'annale' | 'ronéo';
   statut: 'brouillon' | 'publiee';
   numero_officiel: number | null;
+  type_dossier: 'dp' | 'dl';
 }
 
 export interface Suggestion {

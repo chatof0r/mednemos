@@ -45,6 +45,7 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
   const [cours, setCours] = useState<string[]>(initial?.cours ?? []);
   const [annee, setAnnee] = useState<number | ''>(initial?.annee ?? '');
   const [session, setSession] = useState<1 | 2 | null>(initial?.session ?? null);
+  const [typeDossier, setTypeDossier] = useState<'dp' | 'dl'>(initial?.type_dossier ?? 'dp');
   const [titre, setTitre] = useState(initial?.titre ?? '');
   const [enonce, setEnonce] = useState(initial?.enonce ?? '');
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
@@ -185,7 +186,7 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
   const validate = (statut: 'brouillon' | 'publiee') => {
     if (!matiere) return 'Sélectionnez une matière.';
     if (!titre.trim()) return 'Saisissez un titre pour le dossier.';
-    if (slots.length < 2) return 'Un dossier progressif doit contenir au moins 2 questions.';
+    if (slots.length < 2) return 'Un dossier doit contenir au moins 2 questions.';
     if (statut === 'publiee') {
       for (let i = 0; i < slots.length; i++) {
         const s = slots[i];
@@ -232,6 +233,7 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
         source,
         statut,
         numero_officiel: numeroOfficiel !== '' ? numeroOfficiel : null,
+        type_dossier: typeDossier,
       };
 
       let savedDossier: Dossier;
@@ -320,6 +322,26 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-4">Informations</h3>
         <div className="space-y-4">
+
+          {/* Type de dossier */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5">Type de dossier</label>
+            <div className="flex gap-2">
+              {([
+                { v: 'dp', label: 'Dossier progressif', desc: 'Questions déverrouillées une par une' },
+                { v: 'dl', label: 'Dossier libre', desc: 'Toutes les questions visibles dès le début' },
+              ] as { v: 'dp' | 'dl'; label: string; desc: string }[]).map(t => (
+                <button key={t.v} onClick={() => setTypeDossier(t.v)}
+                  className={`flex-1 px-3 py-2 rounded-xl text-sm font-semibold border-2 transition-all text-left ${
+                    typeDossier === t.v
+                      ? t.v === 'dl' ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-amber-500 bg-amber-50 text-amber-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                  {t.label}
+                  <span className="block text-xs font-normal mt-0.5 opacity-70">{t.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Source */}
           <div>
@@ -422,9 +444,9 @@ export default function DossierForm({ initial, onSaved, onCancel }: DossierFormP
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1.5">Numéro DP</label>
+              <label className="block text-xs text-slate-500 mb-1.5">Numéro {typeDossier.toUpperCase()}</label>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm text-slate-500 font-medium">DP</span>
+                <span className="text-sm text-slate-500 font-medium">{typeDossier.toUpperCase()}</span>
                 <input
                   type="number" min={1}
                   value={numeroOfficiel}

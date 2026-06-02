@@ -81,7 +81,7 @@ export default function AdminDossiers() {
             </svg>
           </button>
           <h2 className="text-lg font-semibold text-slate-800">
-            {view === 'edit' ? 'Modifier le dossier' : 'Nouveau dossier progressif'}
+            {view === 'edit' ? 'Modifier le dossier' : 'Nouveau dossier'}
           </h2>
         </div>
         <DossierForm
@@ -97,7 +97,7 @@ export default function AdminDossiers() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold text-slate-800">
-          Dossiers progressifs
+          Dossiers
           <span className="ml-2 text-sm font-normal text-slate-400">({dossiers.length})</span>
         </h2>
         <button
@@ -163,7 +163,16 @@ export default function AdminDossiers() {
                 {/* Q count */}
                 <span className="text-xs text-slate-400 shrink-0">{qCount} question{qCount !== 1 ? 's' : ''}</span>
 
-                {/* Type + Statut */}
+                {/* DP / DL badge */}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-md shrink-0 ${
+                  (d.type_dossier ?? 'dp') === 'dl'
+                    ? 'bg-teal-100 text-teal-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {(d.type_dossier ?? 'dp').toUpperCase()}
+                </span>
+
+                {/* Statut */}
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-md shrink-0 ${
                   d.statut === 'publiee' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
                 }`}>

@@ -585,21 +585,24 @@ interface DossierCardProps {
 
 function DossierCard({ item, answers, validated, onToggle, onValidateQuestion, onContinue, isLast, index, total }: DossierCardProps) {
   const { dossier, questions } = item;
-  const [unlockedCount, setUnlockedCount] = useState(1);
+  const isDL = (dossier.type_dossier ?? 'dp') === 'dl';
 
-  // Auto-déverrouille la question suivante quand la dernière déverrouillée est validée
+  // DL : toutes les questions sont déverrouillées dès le début
+  const [unlockedCount, setUnlockedCount] = useState(isDL ? questions.length : 1);
+
+  // DP uniquement : déverrouille la suivante quand la précédente est validée
   useEffect(() => {
-    if (unlockedCount >= questions.length) return;
+    if (isDL || unlockedCount >= questions.length) return;
     const lastUnlocked = questions[unlockedCount - 1];
     if (lastUnlocked && validated.has(lastUnlocked.id)) {
       setUnlockedCount(n => n + 1);
     }
-  }, [validated, unlockedCount, questions]);
+  }, [validated, unlockedCount, questions, isDL]);
 
   const allValidated = questions.every(q => validated.has(q.id));
 
   const dossierRef = dossier.numero_officiel && dossier.annee
-    ? `DP${dossier.numero_officiel} / ${dossier.annee}${dossier.session ? `.${dossier.session}` : ''}`
+    ? `${isDL ? 'DL' : 'DP'}${dossier.numero_officiel} / ${dossier.annee}${dossier.session ? `.${dossier.session}` : ''}`
     : null;
 
   return (
@@ -607,8 +610,12 @@ function DossierCard({ item, answers, validated, onToggle, onValidateQuestion, o
       {/* Progress + badge */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-slate-400 dark:text-white/30 font-medium">{index + 1} / {total}</span>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400">
-          Dossier progressif
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+          isDL
+            ? 'bg-teal-100 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400'
+            : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+        }`}>
+          {isDL ? 'Dossier libre' : 'Dossier progressif'}
         </span>
       </div>
       <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-1 mb-3">
@@ -636,7 +643,9 @@ function DossierCard({ item, answers, validated, onToggle, onValidateQuestion, o
       <div className="space-y-4">
         {questions.slice(0, unlockedCount).map((q, qIdx) => {
           const isQValidated = validated.has(q.id);
-          const isCurrentQuestion = qIdx === unlockedCount - 1;
+          // DP : seule la dernière question déverrouillée est interactive
+          // DL : toute question non validée est interactive
+          const isInteractive = isDL ? !isQValidated : (qIdx === unlockedCount - 1 && !isQValidated);
 
           return (
             <DossierQuestion
@@ -646,7 +655,7 @@ function DossierCard({ item, answers, validated, onToggle, onValidateQuestion, o
               selected={answers[q.id] ?? []}
               isValidated={isQValidated}
               showCorrection={allValidated}
-              isInteractive={isCurrentQuestion && !isQValidated}
+              isInteractive={isInteractive}
               onToggle={(label) => onToggle(q.id, label)}
               onValidate={() => onValidateQuestion(q.id)}
             />
