@@ -260,7 +260,7 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     }
     if (type === 'QS') {
       if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
-      if (items.some(i => !i.choices?.length)) return 'Chaque item doit avoir au moins un choix (séparez par virgule).';
+      if (items.some(i => !i.choices?.length)) return 'Chaque item doit avoir au moins un choix (séparez par point-virgule).';
       if (items.some(i => !i.correct)) return 'Sélectionnez la réponse correcte pour chaque item.';
       return null;
     }
@@ -828,9 +828,9 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
                 </div>
                 <div className="flex gap-2 ml-8">
                   <input type="text"
-                    value={(item.choices ?? []).join(', ')}
-                    onChange={e => updateItemChoices(i, e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                    placeholder="Choix 1, Choix 2, Choix 3…"
+                    value={(item.choices ?? []).join('; ')}
+                    onChange={e => updateItemChoices(i, e.target.value.split(';').map(s => s.trim()).filter(Boolean))}
+                    placeholder="Choix 1; Choix 2; Choix 3…"
                     className="flex-1 border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500" />
                   <select value={item.correct ?? ''}
                     onChange={e => updateItemCorrect(i, e.target.value)}
