@@ -2,6 +2,10 @@ export interface Item {
   label: string;
   enonce: string;
   justification: string;
+  image_url?: string | null;  // image illustrant cet item
+  choices?: string[];         // QS uniquement : options du menu déroulant
+  correct?: string;           // QS uniquement : option correcte (parmi choices)
+  neutralisee?: boolean;      // item neutralisé — ne compte pas, ne peut pas être juste
 }
 
 export interface HotspotPoint {
@@ -22,7 +26,12 @@ export interface Question {
   cours: string[] | null;
   annee: number | null;
   session: 1 | 2 | null;
-  type: 'QCM' | 'QRU' | 'QZONE';
+  /** QCM/QRU  : items à cocher
+   *  QZONE    : zone sur image
+   *  QROC     : réponse texte libre — reponses[] = mots acceptés
+   *  QS       : items avec menu déroulant — réponse correcte dans Item.correct
+   */
+  type: 'QCM' | 'QRU' | 'QZONE' | 'QROC' | 'QS';
   enonce: string;
   image_url: string | null;
   items: Item[];

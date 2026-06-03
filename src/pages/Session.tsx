@@ -26,6 +26,19 @@ function getItemState(label: string, selected: string[], reponses: string[], val
   return 'incorrect-missed';
 }
 
+// ── Helpers pour les nouveaux types ───────────────────────────────────────────
+
+/** Vrai si au moins un item de la question est neutralisé */
+function isQuestionNeutralisee(q: Question): boolean {
+  return q.items.some(i => i.neutralisee === true);
+}
+
+/** Extrait le choix QS de l'user pour un item donné depuis sel=["A=OUI","B=NON",...] */
+function getQSChoice(sel: string[], label: string): string {
+  const entry = sel.find(s => s.startsWith(`${label}=`));
+  return entry ? entry.slice(label.length + 1) : '';
+}
+
 function pointInPolygon(px: number, py: number, points: Array<{x: number, y: number}>, ar: number): boolean {
   const nx = px;
   const ny = py / ar;
@@ -46,15 +59,32 @@ function zoneHit(q: Question, sel: string[]): boolean | null {
 }
 
 function scoreForQuestion(q: Question, sel: string[]): number {
+  // Question neutralisée → 0 pt, exclue du total
+  if (isQuestionNeutralisee(q)) return 0;
+
   if (q.type === 'QZONE') {
     const hit = zoneHit(q, sel);
     return hit ? 1 : 0;
   }
-  if (q.type === 'QRU') {
-    const correct = q.reponses[0];
-    return sel.length === 1 && sel[0] === correct ? 1 : 0;
+  if (q.type === 'QROC') {
+    const userText = (sel[0] ?? '').trim().toLowerCase();
+    if (!userText) return 0;
+    return q.reponses.some(r => r.trim().toLowerCase() === userText) ? 1 : 0;
   }
+  if (q.type === 'QS') {
+    const activeItems = q.items.filter(i => i.correct);
+    if (activeItems.length === 0) return 0;
+    const errors = activeItems.filter(i => getQSChoice(sel, i.label) !== i.correct).length;
+    if (errors === 0) return 1;
+    if (errors === 1) return 0.5;
+    return 0;
+  }
+  if (q.type === 'QRU') {
+    return sel.length === 1 && sel[0] === q.reponses[0] ? 1 : 0;
+  }
+  // QCM — les items neutralisés ne comptent pas dans les erreurs
   const errors = q.items.filter(i => {
+    if (i.neutralisee) return false;
     const isCorrect = q.reponses.includes(i.label);
     const isSelected = sel.includes(i.label);
     return (isCorrect && !isSelected) || (!isCorrect && isSelected);
@@ -128,6 +158,8 @@ interface QuestionCardProps {
   selected: string[];
   validated: boolean;
   onToggle: (qid: string, label: string) => void;
+  onQSSelect: (qid: string, label: string, choice: string) => void;
+  onQROCInput: (qid: string, text: string) => void;
   onValidate: () => void;
   onNext: () => void;
   isLast: boolean;
@@ -135,13 +167,15 @@ interface QuestionCardProps {
   total: number;
 }
 
-function QuestionCard({ question, selected, validated, onToggle, onValidate, onNext, isLast, index, total }: QuestionCardProps) {
+function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQROCInput, onValidate, onNext, isLast, index, total }: QuestionCardProps) {
   const [remarkText, setRemarkText] = useState('');
   const [remarkSent, setRemarkSent] = useState(false);
   const [showRemark, setShowRemark] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [qrocInput, setQrocInput] = useState(selected[0] ?? '');
   const [, setZonePxW] = useState(0);
   const zoneContainerRef = useRef<HTMLDivElement>(null);
+  const neutralisee = isQuestionNeutralisee(question);
 
   useEffect(() => {
     if (validated) {
@@ -201,12 +235,15 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-slate-400 dark:text-white/30 font-medium">{index + 1} / {total}</span>
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-          question.type === 'QCM'
-            ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400'
-            : question.type === 'QZONE'
-              ? 'bg-teal-100 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400'
-              : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
+          question.type === 'QCM'  ? 'bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400'
+          : question.type === 'QZONE' ? 'bg-teal-100 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400'
+          : question.type === 'QROC' ? 'bg-sky-100 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400'
+          : question.type === 'QS'   ? 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400'
+          : 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400'
         }`}>{question.type}</span>
+        {neutralisee && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-white/40">neutralisée</span>
+        )}
       </div>
 
       {/* Progress bar */}
@@ -271,20 +308,129 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
         </>
       )}
 
-      {/* Items */}
-      {question.type !== 'QZONE' && (
+      {/* ── QROC ── */}
+      {question.type === 'QROC' && (
+        <div className="space-y-3">
+          {!validated ? (
+            <input
+              type="text"
+              value={qrocInput}
+              onChange={e => { setQrocInput(e.target.value); onQROCInput(question.id, e.target.value); }}
+              placeholder="Votre réponse…"
+              className="w-full border border-slate-200 dark:border-white/15 rounded-xl px-4 py-3 text-sm text-slate-800 dark:text-white bg-white dark:bg-white/5 outline-none focus:ring-2 focus:ring-[#e3fe52]/50 focus:border-[#e3fe52]/50"
+            />
+          ) : (
+            <div className="space-y-2">
+              <div className={`px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2 ${
+                scoreForQuestion(question, selected) === 1
+                  ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 text-green-700 dark:text-green-400'
+                  : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400'
+              }`}>
+                {scoreForQuestion(question, selected) === 1
+                  ? <CheckIcon className="w-4 h-4 shrink-0" />
+                  : <XIcon className="w-4 h-4 shrink-0" />}
+                Votre réponse :&nbsp;<span className="font-semibold">{selected[0] || '—'}</span>
+              </div>
+              <div className="px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-white/40">
+                Réponse{question.reponses.length > 1 ? 's' : ''} acceptée{question.reponses.length > 1 ? 's' : ''} :&nbsp;
+                <span className="font-medium text-slate-700 dark:text-white/70">{question.reponses.join(', ')}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── QS (questions sélectives) ── */}
+      {question.type === 'QS' && (
         <div className="space-y-2">
+          {question.items.map(item => {
+            const userChoice = getQSChoice(selected, item.label);
+            const isCorrect  = validated && userChoice === item.correct;
+            const isWrong    = validated && !!userChoice && userChoice !== item.correct;
+            const missed     = validated && !userChoice && !!item.correct;
+            return (
+              <div key={item.label} className={`rounded-xl border p-3 transition-all ${
+                !validated
+                  ? 'border-slate-200 dark:border-white/10 bg-white dark:bg-transparent'
+                  : isCorrect
+                    ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
+                    : (isWrong || missed)
+                      ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
+                      : 'border-slate-200/60 dark:border-white/8'
+              }`}>
+                <div className="flex items-start gap-2.5">
+                  {validated && (
+                    <div className={`mt-0.5 shrink-0 w-5 h-5 flex items-center justify-center rounded-full ${
+                      isCorrect ? 'bg-green-400 dark:bg-green-500/80' : (isWrong || missed) ? 'bg-red-500' : 'bg-slate-200 dark:bg-white/10'
+                    }`}>
+                      {isCorrect && <CheckIcon className="w-3 h-3 text-white" />}
+                      {(isWrong || missed) && <XIcon className="w-3 h-3 text-white" />}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex gap-1.5 mb-2">
+                      <span className={`text-sm font-semibold shrink-0 ${validated ? isCorrect ? 'text-green-700 dark:text-green-400' : (isWrong || missed) ? 'text-red-700 dark:text-red-400' : 'text-slate-400 dark:text-white/30' : 'text-slate-700 dark:text-white/70'}`}>{item.label}.</span>
+                      <div className="flex-1">
+                        {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-32 object-contain rounded-lg mb-1.5 bg-slate-50 dark:bg-white/5" />}
+                        <span className={`text-sm ${validated ? isCorrect ? 'text-green-700 dark:text-green-400' : (isWrong || missed) ? 'text-red-700 dark:text-red-400' : 'text-slate-400 dark:text-white/30' : 'text-slate-700 dark:text-white'}`}>{item.enonce}</span>
+                      </div>
+                    </div>
+                    {!validated ? (
+                      <select value={userChoice} onChange={e => onQSSelect(question.id, item.label, e.target.value)}
+                        className="w-full border border-slate-200 dark:border-white/15 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-white/5 text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[#e3fe52]/50">
+                        <option value="">— choisir —</option>
+                        {(item.choices ?? []).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs mt-1">
+                        <span className={`font-medium ${(isWrong || missed) ? 'text-red-600 dark:text-red-400 line-through' : 'text-green-600 dark:text-green-400'}`}>{userChoice || '—'}</span>
+                        {(isWrong || missed) && <><span className="text-slate-400">→</span><span className="font-semibold text-green-600 dark:text-green-400">{item.correct}</span></>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Items QCM / QRU (avec support neutralisée + images) ── */}
+      {(question.type === 'QCM' || question.type === 'QRU') && (
+        <div className="space-y-2">
+          {/* Badge question neutralisée */}
+          {neutralisee && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-white/40">
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              Question neutralisée — non comptée dans le score
+            </div>
+          )}
           {question.items.map((item: Item) => {
-            const state = getItemState(item.label, selected, question.reponses, validated);
+            const isNeutr    = item.neutralisee === true;
+            const isCorrect  = !isNeutr && question.reponses.includes(item.label);
             const isSelected = selected.includes(item.label);
             const isExpanded = expandedItems.has(item.label);
+            const state      = getItemState(item.label, selected, question.reponses, validated);
 
-            const isCorrect  = question.reponses.includes(item.label);
+            // Item neutralisé → toujours grisé, non sélectionnable
+            if (isNeutr) return (
+              <div key={item.label} className="rounded-xl border border-slate-200/60 dark:border-white/8 bg-white/50 dark:bg-transparent opacity-50 p-3 flex items-start gap-3">
+                <div className="shrink-0 w-5 h-5 rounded-md border-2 border-slate-200 dark:border-white/15 bg-white/50 dark:bg-transparent flex items-center justify-center">
+                  <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-32 object-contain rounded-lg mb-1.5 bg-slate-50 dark:bg-white/5" />}
+                  <span className="text-sm font-semibold text-slate-400 dark:text-white/30 mr-1">{item.label}.</span>
+                  <span className="text-sm text-slate-400 dark:text-white/30">{item.enonce}</span>
+                  <span className="ml-2 text-xs text-slate-400 dark:text-white/25 italic">neutralisé</span>
+                </div>
+              </div>
+            );
 
-            // Après validation :
-            //   • toutes les bonnes réponses → vert (sélectionnées ou non)
-            //   • mauvaises réponses sélectionnées → rouge
-            //   • items neutres → grisés
             const containerClass = !validated
               ? isSelected
                 ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5'
@@ -296,49 +442,39 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
                   : 'border-slate-200/60 dark:border-white/8 bg-white/50 dark:bg-transparent';
 
             const iconBg = !validated
-              ? isSelected
-                ? 'border-[#e3fe52] bg-[#e3fe52]'
-                : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent'
-              : isCorrect
-                ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
-                : isSelected
-                  ? 'border-red-500 bg-red-500'
+              ? isSelected ? 'border-[#e3fe52] bg-[#e3fe52]' : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent'
+              : isCorrect ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
+                : isSelected ? 'border-red-500 bg-red-500'
                   : 'border-slate-200/60 dark:border-white/10 bg-white/50 dark:bg-transparent';
 
-            const labelColor = !validated
-              ? 'text-slate-700 dark:text-white/70'
-              : isCorrect
-                ? 'text-green-700 dark:text-green-400'
-                : isSelected
-                  ? 'text-red-700 dark:text-red-400'
+            const labelColor = !validated ? 'text-slate-700 dark:text-white/70'
+              : isCorrect ? 'text-green-700 dark:text-green-400'
+                : isSelected ? 'text-red-700 dark:text-red-400'
                   : 'text-slate-400 dark:text-white/30';
 
-            const textColor = !validated
-              ? 'text-slate-700 dark:text-white'
-              : isCorrect
-                ? 'text-green-700 dark:text-green-400'
-                : isSelected
-                  ? 'text-red-700 dark:text-red-400'
+            const textColor = !validated ? 'text-slate-700 dark:text-white'
+              : isCorrect ? 'text-green-700 dark:text-green-400'
+                : isSelected ? 'text-red-700 dark:text-red-400'
                   : 'text-slate-400 dark:text-white/35';
 
-            // ✓ vert sur toutes les bonnes réponses ; ✗ rouge sur les mauvaises sélectionnées
             const showCheck = !validated ? isSelected : isCorrect;
             const showX     = validated && isSelected && !isCorrect;
 
             return (
               <div key={item.label} className={`rounded-xl border transition-all overflow-hidden ${containerClass}`}>
-                <div className="flex items-center gap-3 p-3 cursor-pointer"
+                <div className={`flex items-start gap-3 p-3 ${!validated && !neutralisee ? 'cursor-pointer' : validated && item.justification ? 'cursor-pointer' : ''}`}
                   onClick={() => validated ? toggleExpand(item.label) : onToggle(question.id, item.label)}>
-                  <div className={`shrink-0 w-5 h-5 flex items-center justify-center border-2 transition-all ${question.type === 'QRU' ? 'rounded-full' : 'rounded-md'} ${iconBg}`}>
+                  <div className={`shrink-0 w-5 h-5 flex items-center justify-center border-2 transition-all mt-0.5 ${question.type === 'QRU' ? 'rounded-full' : 'rounded-md'} ${iconBg}`}>
                     {showCheck && <CheckIcon className="w-3 h-3 text-[#0c0c0c] dark:text-[#0c0c0c]" />}
                     {showX && <XIcon className="w-3 h-3 text-white" />}
                   </div>
                   <div className="flex-1 min-w-0">
+                    {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-40 object-contain rounded-lg mb-1.5 bg-slate-50 dark:bg-white/5" />}
                     <span className={`text-sm font-semibold mr-1 ${labelColor}`}>{item.label}.</span>
                     <span className={`text-sm ${textColor}`}>{item.enonce}</span>
                   </div>
                   {validated && item.justification && (
-                    <ChevronIcon open={isExpanded} className={`w-3.5 h-3.5 shrink-0 ${
+                    <ChevronIcon open={isExpanded} className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
                       state === 'correct-checked' ? 'text-green-400' : state === 'incorrect-checked' ? 'text-red-400'
                         : state === 'correct-missed' ? 'text-green-600' : 'text-slate-300'}`} />
                   )}
@@ -413,14 +549,17 @@ interface DossierQuestionProps {
   question: Question;
   qIndex: number;
   selected: string[];
-  isValidated: boolean;   // cette question a été validée
-  showCorrection: boolean; // afficher les corrections (toutes les questions du dossier validées)
-  isInteractive: boolean; // l'user peut encore répondre
+  isValidated: boolean;
+  showCorrection: boolean;
+  isInteractive: boolean;
   onToggle: (label: string) => void;
+  onQSSelect: (label: string, choice: string) => void;
+  onQROCInput: (text: string) => void;
   onValidate: () => void;
 }
 
-function DossierQuestion({ question, qIndex, selected, isValidated, showCorrection, isInteractive, onToggle, onValidate }: DossierQuestionProps) {
+function DossierQuestion({ question, qIndex, selected, isValidated, showCorrection, isInteractive, onToggle, onQSSelect, onQROCInput, onValidate }: DossierQuestionProps) {
+  const [qrocInput, setQrocInput] = useState(selected[0] ?? '');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -471,60 +610,114 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
         {/* Énoncé */}
         <p className="text-sm font-medium text-slate-800 dark:text-white leading-relaxed mb-3 whitespace-pre-wrap">{question.enonce}</p>
 
-        {/* Items */}
+        {/* ── QROC dans dossier ── */}
+        {question.type === 'QROC' && (
+          <div className="space-y-2">
+            {isInteractive && !isValidated ? (
+              <input type="text" value={qrocInput}
+                onChange={e => { setQrocInput(e.target.value); onQROCInput(e.target.value); }}
+                placeholder="Votre réponse…"
+                className="w-full border border-slate-200 dark:border-white/15 rounded-lg px-3 py-2 text-sm bg-white dark:bg-white/5 text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[#e3fe52]/50" />
+            ) : showCorrection ? (
+              <div className="space-y-1.5">
+                <div className={`px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${scoreForQuestion(question, selected) === 1 ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'}`}>
+                  {scoreForQuestion(question, selected) === 1 ? <CheckIcon className="w-3.5 h-3.5" /> : <XIcon className="w-3.5 h-3.5" />}
+                  <span className="font-semibold">{selected[0] || '—'}</span>
+                </div>
+                <p className="text-xs text-slate-400 dark:text-white/30">Accepté : <span className="font-medium text-slate-600 dark:text-white/60">{question.reponses.join(', ')}</span></p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 dark:text-white/30 italic">{selected[0] ? `Réponse : ${selected[0]}` : 'Pas de réponse'}</p>
+            )}
+          </div>
+        )}
+
+        {/* ── QS dans dossier ── */}
+        {question.type === 'QS' && (
+          <div className="space-y-1.5">
+            {question.items.map(item => {
+              const userChoice = getQSChoice(selected, item.label);
+              const isCorrect  = showCorrection && userChoice === item.correct;
+              const isWrong    = showCorrection && !!userChoice && userChoice !== item.correct;
+              const missed     = showCorrection && !userChoice && !!item.correct;
+              return (
+                <div key={item.label} className={`rounded-lg border p-2.5 transition-all ${
+                  !isValidated ? 'border-slate-200 dark:border-white/10'
+                    : !showCorrection ? 'border-slate-100 dark:border-white/5 opacity-60'
+                      : isCorrect ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
+                        : (isWrong || missed) ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
+                          : 'border-slate-200/60 dark:border-white/8'
+                }`}>
+                  {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-24 object-contain rounded mb-1.5 bg-slate-50 dark:bg-white/5" />}
+                  <p className="text-xs text-slate-500 dark:text-white/50 mb-1.5"><span className="font-semibold">{item.label}.</span> {item.enonce}</p>
+                  {isInteractive && !isValidated ? (
+                    <select value={userChoice} onChange={e => onQSSelect(item.label, e.target.value)}
+                      className="w-full border border-slate-200 dark:border-white/15 rounded px-2 py-1 text-xs bg-white dark:bg-white/5 text-slate-700 dark:text-white outline-none">
+                      <option value="">— choisir —</option>
+                      {(item.choices ?? []).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  ) : showCorrection ? (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className={`font-medium ${(isWrong || missed) ? 'text-red-600 dark:text-red-400 line-through' : 'text-green-600 dark:text-green-400'}`}>{userChoice || '—'}</span>
+                      {(isWrong || missed) && <><span className="text-slate-400">→</span><span className="font-semibold text-green-600 dark:text-green-400">{item.correct}</span></>}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 dark:text-white/30">{userChoice || '—'}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Items QCM / QRU dans dossier (neutralisée + images) ── */}
+        {(question.type === 'QCM' || question.type === 'QRU') && (
         <div className="space-y-1.5">
           {question.items.map(item => {
+            const isNeutr    = item.neutralisee === true;
             const isSelected = selected.includes(item.label);
-
-            // Styles selon l'état
             let containerClass: string;
             let iconBg: string;
             let labelColor: string;
             let textColor: string;
             let showCheck = false;
             let showX = false;
-            let isExpanded = expandedItems.has(item.label);
+            const isExpanded = expandedItems.has(item.label);
+            const isCorrect  = question.reponses.includes(item.label);
 
-            const isCorrect = question.reponses.includes(item.label);
+            if (isNeutr) return (
+              <div key={item.label} className="rounded-lg border border-slate-200/60 dark:border-white/8 opacity-50 p-2.5 flex items-start gap-2.5">
+                <div className="shrink-0 w-[18px] h-[18px] flex items-center justify-center rounded-md border-2 border-slate-200 dark:border-white/15">
+                  <svg className="w-2.5 h-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-24 object-contain rounded mb-1 bg-slate-50 dark:bg-white/5" />}
+                  <span className="text-sm font-semibold text-slate-400 dark:text-white/30 mr-1">{item.label}.</span>
+                  <span className="text-sm text-slate-400 dark:text-white/30">{item.enonce}</span>
+                  <span className="ml-1.5 text-xs italic text-slate-400 dark:text-white/25">neutralisé</span>
+                </div>
+              </div>
+            );
 
             if (!isValidated) {
-              // Interactif
-              containerClass = isSelected
-                ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5'
-                : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20';
+              containerClass = isSelected ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20';
               iconBg = isSelected ? 'border-[#e3fe52] bg-[#e3fe52]' : 'border-slate-300 dark:border-white/20';
               labelColor = 'text-slate-700 dark:text-white/70';
               textColor = 'text-slate-700 dark:text-white';
               showCheck = isSelected;
             } else if (!showCorrection) {
-              // Verrouillé (réponse enregistrée, correction pas encore visible)
-              containerClass = isSelected
-                ? 'border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-white/10'
-                : 'border-slate-100 dark:border-white/5 opacity-60';
+              containerClass = isSelected ? 'border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-white/10' : 'border-slate-100 dark:border-white/5 opacity-60';
               iconBg = isSelected ? 'border-slate-400 bg-slate-300 dark:border-white/30 dark:bg-white/20' : 'border-slate-200 dark:border-white/10';
               labelColor = 'text-slate-500 dark:text-white/40';
               textColor = 'text-slate-600 dark:text-white/50';
               showCheck = isSelected;
             } else {
-              // Corrections visibles :
-              //   • bonne réponse (sélectionnée ou non) → vert + ✓
-              //   • mauvaise réponse sélectionnée → rouge + ✗
-              //   • item neutre → grisé, sans icône
-              containerClass = isCorrect
-                ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
-                : isSelected
-                  ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
+              containerClass = isCorrect ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
+                : isSelected ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
                   : 'border-slate-200/60 dark:border-white/8 opacity-50';
-              iconBg = isCorrect
-                ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
-                : isSelected
-                  ? 'border-red-500 bg-red-500'
-                  : 'border-slate-300/60 bg-white/50 dark:bg-transparent';
-              labelColor = isCorrect
-                ? 'text-green-700 dark:text-green-400'
-                : isSelected
-                  ? 'text-red-700 dark:text-red-400'
-                  : 'text-slate-400 dark:text-white/30';
+              iconBg = isCorrect ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
+                : isSelected ? 'border-red-500 bg-red-500' : 'border-slate-300/60 bg-white/50 dark:bg-transparent';
+              labelColor = isCorrect ? 'text-green-700 dark:text-green-400' : isSelected ? 'text-red-700 dark:text-red-400' : 'text-slate-400 dark:text-white/30';
               textColor = labelColor;
               showCheck = isCorrect;
               showX = isSelected && !isCorrect;
@@ -532,40 +725,32 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
 
             return (
               <div key={item.label} className={`rounded-lg border transition-all overflow-hidden ${containerClass}`}>
-                <div
-                  className={`flex items-center gap-2.5 p-2.5 ${isInteractive && !isValidated ? 'cursor-pointer' : showCorrection && item.justification ? 'cursor-pointer' : ''}`}
+                <div className={`flex items-start gap-2.5 p-2.5 ${isInteractive && !isValidated ? 'cursor-pointer' : showCorrection && item.justification ? 'cursor-pointer' : ''}`}
                   onClick={() => {
                     if (!isValidated && isInteractive) onToggle(item.label);
                     else if (showCorrection && item.justification) {
-                      setExpandedItems(prev => {
-                        const n = new Set(prev);
-                        n.has(item.label) ? n.delete(item.label) : n.add(item.label);
-                        return n;
-                      });
+                      setExpandedItems(prev => { const n = new Set(prev); n.has(item.label) ? n.delete(item.label) : n.add(item.label); return n; });
                     }
-                  }}
-                >
-                  <div className={`shrink-0 w-4.5 h-4.5 w-[18px] h-[18px] flex items-center justify-center border-2 transition-all ${question.type === 'QRU' ? 'rounded-full' : 'rounded-md'} ${iconBg}`}>
+                  }}>
+                  <div className={`shrink-0 w-[18px] h-[18px] flex items-center justify-center border-2 transition-all mt-0.5 ${question.type === 'QRU' ? 'rounded-full' : 'rounded-md'} ${iconBg}`}>
                     {showCheck && <CheckIcon className="w-2.5 h-2.5 text-[#0c0c0c]" />}
                     {showX && <XIcon className="w-2.5 h-2.5 text-white" />}
                   </div>
                   <div className="flex-1 min-w-0">
+                    {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-32 object-contain rounded mb-1 bg-slate-50 dark:bg-white/5" />}
                     <span className={`text-sm font-semibold mr-1 ${labelColor}`}>{item.label}.</span>
                     <span className={`text-sm ${textColor}`}>{item.enonce}</span>
                   </div>
-                  {showCorrection && item.justification && (
-                    <ChevronIcon open={isExpanded} className={`w-3 h-3 shrink-0 ${labelColor}`} />
-                  )}
+                  {showCorrection && item.justification && <ChevronIcon open={isExpanded} className={`w-3 h-3 shrink-0 ${labelColor}`} />}
                 </div>
                 {showCorrection && isExpanded && item.justification && (
-                  <div className={`px-3 pb-2.5 pt-0 text-xs leading-relaxed italic border-t border-current/10 ${labelColor}`}>
-                    {item.justification}
-                  </div>
+                  <div className={`px-3 pb-2.5 pt-0 text-xs leading-relaxed italic border-t border-current/10 ${labelColor}`}>{item.justification}</div>
                 )}
               </div>
             );
           })}
         </div>
+        )}
 
         {/* Note de correction */}
         {showCorrection && question.note_correction && (
@@ -596,6 +781,8 @@ interface DossierCardProps {
   answers: Record<string, string[]>;
   validated: Set<string>;
   onToggle: (qid: string, label: string) => void;
+  onQSSelect: (qid: string, label: string, choice: string) => void;
+  onQROCInput: (qid: string, text: string) => void;
   onValidateQuestion: (qid: string) => void;
   onContinue: () => void;
   isLast: boolean;
@@ -603,7 +790,7 @@ interface DossierCardProps {
   total: number;
 }
 
-function DossierCard({ item, answers, validated, onToggle, onValidateQuestion, onContinue, isLast, index, total }: DossierCardProps) {
+function DossierCard({ item, answers, validated, onToggle, onQSSelect, onQROCInput, onValidateQuestion, onContinue, isLast, index, total }: DossierCardProps) {
   const { dossier, questions } = item;
   const isDL = (dossier.type_dossier ?? 'dp') === 'dl';
 
@@ -677,6 +864,8 @@ function DossierCard({ item, answers, validated, onToggle, onValidateQuestion, o
               showCorrection={allValidated}
               isInteractive={isInteractive}
               onToggle={(label) => onToggle(q.id, label)}
+              onQSSelect={(label, choice) => onQSSelect(q.id, label, choice)}
+              onQROCInput={(text) => onQROCInput(q.id, text)}
               onValidate={() => onValidateQuestion(q.id)}
             />
           );
@@ -714,18 +903,23 @@ interface ResultsProps {
 }
 
 function Results({ questions, answers, onRestart }: ResultsProps) {
-  const totalScore = questions.reduce((sum, q) => sum + scoreForQuestion(q, answers[q.id] ?? []), 0);
-  const displayScore = totalScore % 1 === 0 ? String(totalScore) : totalScore.toFixed(1);
-  const pct = Math.max(0, Math.round((totalScore / questions.length) * 100));
-  const color = pct >= 70 ? 'text-green-500' : pct >= 50 ? 'text-orange-400' : 'text-red-400';
+  const countableQs   = questions.filter(q => !isQuestionNeutralisee(q));
+  const totalScore    = countableQs.reduce((sum, q) => sum + scoreForQuestion(q, answers[q.id] ?? []), 0);
+  const displayScore  = totalScore % 1 === 0 ? String(totalScore) : totalScore.toFixed(1);
+  const pct           = countableQs.length ? Math.max(0, Math.round((totalScore / countableQs.length) * 100)) : 0;
+  const color    = pct >= 70 ? 'text-green-500' : pct >= 50 ? 'text-orange-400' : 'text-red-400';
   const barColor = pct >= 70 ? 'bg-green-500' : pct >= 50 ? 'bg-orange-400' : 'bg-red-400';
-  const errorQuestions = questions.filter(q => scoreForQuestion(q, answers[q.id] ?? []) < 1);
+  const neutralisees  = questions.filter(isQuestionNeutralisee);
+  const errorQuestions = countableQs.filter(q => scoreForQuestion(q, answers[q.id] ?? []) < 1);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <div className="bg-white dark:bg-[#141414] border border-slate-100 dark:border-white/10 rounded-2xl shadow-sm p-8 text-center mb-8 transition-colors">
-        <div className={`text-6xl font-bold mb-2 ${color}`}>{displayScore}<span className="text-3xl text-slate-300 dark:text-white/20">/{questions.length}</span></div>
-        <div className="text-slate-400 dark:text-white/30 text-sm mb-5">{pct}% de réussite</div>
+        <div className={`text-6xl font-bold mb-2 ${color}`}>{displayScore}<span className="text-3xl text-slate-300 dark:text-white/20">/{countableQs.length}</span></div>
+        <div className="text-slate-400 dark:text-white/30 text-sm mb-5">
+          {pct}% de réussite
+          {neutralisees.length > 0 && <span className="ml-2 text-slate-300 dark:text-white/20">· {neutralisees.length} neutralisée{neutralisees.length > 1 ? 's' : ''}</span>}
+        </div>
         <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-2 mb-7 overflow-hidden">
           <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
@@ -859,8 +1053,22 @@ export default function Session() {
       const sel = prev[questionId] ?? [];
       if (q.type === 'QZONE') return { ...prev, [questionId]: [label] };
       if (q.type === 'QRU') return { ...prev, [questionId]: sel.includes(label) ? [] : [label] };
+      // QCM : pas de sélection d'items neutralisés
+      const item = q.items.find(i => i.label === label);
+      if (item?.neutralisee) return prev;
       return { ...prev, [questionId]: sel.includes(label) ? sel.filter(l => l !== label) : [...sel, label] };
     });
+  };
+
+  const handleQSSelect = (questionId: string, label: string, choice: string) => {
+    setAnswers(prev => {
+      const sel = (prev[questionId] ?? []).filter(s => !s.startsWith(`${label}=`));
+      return { ...prev, [questionId]: choice ? [...sel, `${label}=${choice}`] : sel };
+    });
+  };
+
+  const handleQROCInput = (questionId: string, text: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: text ? [text] : [] }));
   };
 
   const goNext = () => {
@@ -876,6 +1084,8 @@ export default function Session() {
           selected={answers[currentItem.question.id] ?? []}
           validated={validated.has(currentItem.question.id)}
           onToggle={handleToggle}
+          onQSSelect={handleQSSelect}
+          onQROCInput={handleQROCInput}
           onValidate={() => setValidated(prev => new Set([...prev, currentItem.question.id]))}
           onNext={goNext}
           isLast={currentIndex + 1 >= items.length}
@@ -888,6 +1098,8 @@ export default function Session() {
           answers={answers}
           validated={validated}
           onToggle={handleToggle}
+          onQSSelect={handleQSSelect}
+          onQROCInput={handleQROCInput}
           onValidateQuestion={(qid) => setValidated(prev => new Set([...prev, qid]))}
           onContinue={goNext}
           isLast={currentIndex + 1 >= items.length}

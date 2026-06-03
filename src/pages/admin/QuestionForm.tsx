@@ -7,7 +7,7 @@ import QuestionPreview from './QuestionPreview';
 const ITEM_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 const defaultItems = (): Item[] =>
-  ['A', 'B', 'C', 'D', 'E'].map(label => ({ label, enonce: '', justification: '' }));
+  ['A', 'B', 'C', 'D', 'E'].map(label => ({ label, enonce: '', justification: '', neutralisee: false }));
 
 interface QuestionFormProps {
   initial?: Question;           // présent uniquement en mode édition (a un id)
@@ -24,7 +24,9 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   const [annee, setAnnee] = useState<number | ''>(seed?.annee ?? '');
   const [session, setSession] = useState<1 | 2 | null>(seed?.session ?? null);
   const [numeroOfficiel, setNumeroOfficiel] = useState<number | ''>(initial?.numero_officiel ?? '');
-  const [type, setType] = useState<'QCM' | 'QRU' | 'QZONE'>(seed?.type ?? 'QCM');
+  const [type, setType] = useState<'QCM' | 'QRU' | 'QZONE' | 'QROC' | 'QS'>(seed?.type ?? 'QCM');
+  // État pour "mot QROC en cours de saisie" dans le champ d'ajout
+  const [qrocNewWord, setQrocNewWord] = useState('');
   const [hotspot, setHotspot] = useState<Hotspot | null>(initial?.hotspot ?? null);
   const [drawing, setDrawing] = useState<HotspotPoint[]>([]); // sommets en cours de dessin
   const hotspotContainerRef = useRef<HTMLDivElement>(null);
@@ -103,6 +105,32 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     setItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
   };
 
+  const updateItemNeutralisee = (index: number, neutralisee: boolean) => {
+    const label = items[index].label;
+    setItems(prev => prev.map((item, i) => i === index ? { ...item, neutralisee } : item));
+    // Un item neutralisé ne peut pas être une bonne réponse
+    if (neutralisee) setReponses(prev => prev.filter(r => r !== label));
+  };
+
+  const updateItemChoices = (index: number, choices: string[]) => {
+    setItems(prev => prev.map((item, i) => i === index ? { ...item, choices } : item));
+  };
+
+  const updateItemCorrect = (index: number, correct: string) => {
+    setItems(prev => prev.map((item, i) => i === index ? { ...item, correct } : item));
+  };
+
+  const addQrocWord = () => {
+    const w = qrocNewWord.trim();
+    if (!w || reponses.includes(w)) return;
+    setReponses(prev => [...prev, w]);
+    setQrocNewWord('');
+  };
+
+  const removeQrocWord = (word: string) => {
+    setReponses(prev => prev.filter(w => w !== word));
+  };
+
   const addItem = () => {
     if (items.length >= ITEM_LABELS.length) return;
     setItems(prev => [...prev, { label: ITEM_LABELS[prev.length], enonce: '', justification: '' }]);
@@ -155,6 +183,8 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
   };
 
   const toggleReponse = (label: string) => {
+    const item = items.find(i => i.label === label);
+    if (item?.neutralisee) return; // item neutralisé : jamais sélectionnable comme juste
     if (type === 'QRU') {
       setReponses(reponses.includes(label) ? [] : [label]);
     } else {
@@ -182,8 +212,11 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     type,
     enonce: enonce.trim(),
     image_url: uploadedImageUrl,
-    items: type === 'QZONE' ? [] : items,
-    reponses: type === 'QZONE' ? [] : reponses,
+    // QROC : items vides, reponses = mots acceptés
+    // QS   : items avec choices/correct, reponses vide
+    // QZONE: items vides, reponses vides
+    items:    type === 'QZONE' || type === 'QROC' ? [] : items,
+    reponses: type === 'QZONE' || type === 'QS'   ? [] : reponses,
     hotspot: type === 'QZONE' ? hotspot : null,
     note_correction: noteCorrection.trim() || null,
     statut,
@@ -218,10 +251,22 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     if (!enonce.trim()) return "L'énoncé est requis.";
     if (type === 'QZONE') {
       if (!imagePreview) return 'Une image est requise pour une question QZONE.';
-      if (!hotspot) return 'Dessinez la zone de réponse sur l\'image (minimum 3 points, cliquez le premier pour fermer).';
+      if (!hotspot) return "Dessinez la zone de réponse sur l'image (minimum 3 points, cliquez le premier pour fermer).";
+      return null;
+    }
+    if (type === 'QROC') {
+      if (reponses.length === 0) return 'Ajoutez au moins un mot/expression accepté.';
+      return null;
+    }
+    if (type === 'QS') {
+      if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
+      if (items.some(i => !i.choices?.length)) return 'Chaque item doit avoir au moins un choix (séparez par virgule).';
+      if (items.some(i => !i.correct)) return 'Sélectionnez la réponse correcte pour chaque item.';
       return null;
     }
     if (items.some(i => !i.enonce.trim())) return 'Tous les items doivent avoir un énoncé.';
+    const nonNeutr = items.filter(i => !i.neutralisee);
+    if (nonNeutr.length === 0) return 'Au moins un item doit ne pas être neutralisé.';
     if (reponses.length === 0) return 'Sélectionnez au moins une bonne réponse.';
     return null;
   };
@@ -267,7 +312,10 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
     session: source === 'ronéo' ? null : session,
     numero_officiel: source === 'ronéo' ? null : (numeroOfficiel !== '' ? numeroOfficiel : null),
     source,
-    type, enonce, image_url: imagePreview, items, reponses, hotspot, statut: 'brouillon',
+    type, enonce, image_url: imagePreview,
+    items:    type === 'QZONE' || type === 'QROC' ? [] : items,
+    reponses: type === 'QZONE' || type === 'QS'   ? [] : reponses,
+    hotspot, statut: 'brouillon',
     note_correction: noteCorrection.trim() || null,
     dossier_id: null,
     ordre_dossier: null,
@@ -638,18 +686,25 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-700">Import rapide</h3>
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-            {(['QCM', 'QRU', 'QZONE'] as const).map(t => (
+          <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5 flex-wrap">
+            {([
+              { v: 'QCM',   color: 'text-violet-700' },
+              { v: 'QRU',   color: 'text-orange-700' },
+              { v: 'QROC',  color: 'text-sky-700'    },
+              { v: 'QS',    color: 'text-indigo-700' },
+              { v: 'QZONE', color: 'text-teal-700'   },
+            ] as { v: 'QCM'|'QRU'|'QROC'|'QS'|'QZONE'; color: string }[]).map(t => (
               <button
-                key={t}
-                onClick={() => { setType(t); if (t === 'QRU' && reponses.length > 1) setReponses([reponses[0]]); }}
+                key={t.v}
+                onClick={() => {
+                  setType(t.v);
+                  if (t.v === 'QRU' && reponses.length > 1) setReponses([reponses[0]]);
+                }}
                 className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  type === t
-                    ? t === 'QZONE' ? 'bg-white text-teal-700 shadow-sm' : 'bg-white text-blue-700 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                  type === t.v ? `bg-white ${t.color} shadow-sm` : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {t}
+                {t.v}
               </button>
             ))}
           </div>
@@ -713,58 +768,165 @@ export default function QuestionForm({ initial, prefill, onSaved, onCancel }: Qu
         />
       </div>
 
-      {/* ── Items (masqué pour QZONE) ── */}
-      {type !== 'QZONE' && <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-700">Items de réponse</h3>
-          <div className="flex items-center gap-2">
-            <button onClick={removeItem} disabled={items.length <= 2}
-              className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-red-300 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-              − Supprimer
-            </button>
-            <button onClick={addItem} disabled={items.length >= ITEM_LABELS.length}
-              className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+      {/* ── QROC : mots acceptés ── */}
+      {type === 'QROC' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-1">Réponses acceptées *</h3>
+          <p className="text-xs text-slate-400 mb-3">Tous les mots/expressions qui seront acceptés comme bonne réponse (insensible à la casse).</p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {reponses.map(w => (
+              <span key={w} className="flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200 rounded-lg text-sm text-sky-700 font-medium">
+                {w}
+                <button onClick={() => removeQrocWord(w)} className="text-sky-400 hover:text-red-500 transition-colors">×</button>
+              </span>
+            ))}
+            {reponses.length === 0 && <p className="text-xs text-slate-400 italic">Aucun mot ajouté</p>}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text" value={qrocNewWord}
+              onChange={e => setQrocNewWord(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addQrocWord(); } }}
+              placeholder="Ajouter un mot ou expression…"
+              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+            />
+            <button onClick={addQrocWord} disabled={!qrocNewWord.trim()}
+              className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors">
               + Ajouter
             </button>
           </div>
         </div>
+      )}
 
-        <div className="space-y-3">
-          {items.map((item, i) => (
-            <div key={item.label} className="flex items-start gap-3">
-              <span className="shrink-0 w-6 h-6 bg-slate-100 rounded-md flex items-center justify-center text-xs font-bold text-slate-600 mt-2.5">
-                {item.label}
-              </span>
-              <div className="flex-1 grid sm:grid-cols-2 gap-2">
-                <input type="text" value={item.enonce} onChange={e => updateItem(i, 'enonce', e.target.value)}
-                  placeholder={`Énoncé item ${item.label}`}
-                  className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400" />
-                <input type="text" value={item.justification} onChange={e => updateItem(i, 'justification', e.target.value)}
-                  placeholder="Justification (optionnel)"
-                  className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500" />
-              </div>
+      {/* ── QS : items avec choix sélectifs ── */}
+      {type === 'QS' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700">Items sélectifs</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Chaque item a un menu déroulant. Entrez les choix séparés par des virgules, puis désignez le bon.</p>
             </div>
-          ))}
+            <div className="flex items-center gap-2">
+              <button onClick={removeItem} disabled={items.length <= 2}
+                className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-red-300 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                − Item
+              </button>
+              <button onClick={addItem} disabled={items.length >= ITEM_LABELS.length}
+                className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                + Item
+              </button>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {items.map((item, i) => (
+              <div key={item.label} className="border border-slate-100 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 w-6 h-6 bg-indigo-100 rounded-md flex items-center justify-center text-xs font-bold text-indigo-700">{item.label}</span>
+                  <input type="text" value={item.enonce} onChange={e => updateItem(i, 'enonce', e.target.value)}
+                    placeholder={`Texte de l'item ${item.label}`}
+                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div className="flex gap-2 ml-8">
+                  <input type="text"
+                    value={(item.choices ?? []).join(', ')}
+                    onChange={e => updateItemChoices(i, e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                    placeholder="Choix 1, Choix 2, Choix 3…"
+                    className="flex-1 border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500" />
+                  <select value={item.correct ?? ''}
+                    onChange={e => updateItemCorrect(i, e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-green-400 text-green-700 font-medium bg-white">
+                    <option value="">— correct —</option>
+                    {(item.choices ?? []).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="ml-8">
+                  <input type="text" value={item.justification} onChange={e => updateItem(i, 'justification', e.target.value)}
+                    placeholder="Justification (optionnel)"
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>}
+      )}
 
-      {/* ── Réponses correctes (masqué pour QZONE) ── */}
-      {type !== 'QZONE' && <div className="bg-white rounded-2xl border border-slate-200 p-5">
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">
-          Réponses correctes *
-          {type === 'QRU' && <span className="ml-1 font-normal text-slate-400">(une seule)</span>}
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {items.map(item => (
-            <button key={item.label} onClick={() => toggleReponse(item.label)}
-              className={`w-10 h-10 rounded-xl font-bold text-sm transition-all ${
-                reponses.includes(item.label) ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}>
-              {item.label}
-            </button>
-          ))}
+      {/* ── Items QCM / QRU (avec neutralisée) ── */}
+      {(type === 'QCM' || type === 'QRU') && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-700">Items de réponse</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={removeItem} disabled={items.length <= 2}
+                className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-red-300 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                − Supprimer
+              </button>
+              <button onClick={addItem} disabled={items.length >= ITEM_LABELS.length}
+                className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg text-slate-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                + Ajouter
+              </button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {items.map((item, i) => (
+              <div key={item.label} className={`rounded-xl border p-3 transition-colors ${item.neutralisee ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-transparent'}`}>
+                <div className="flex items-start gap-3">
+                  <span className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold mt-0.5 ${item.neutralisee ? 'bg-slate-200 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
+                    {item.label}
+                  </span>
+                  <div className="flex-1 grid sm:grid-cols-2 gap-2">
+                    <input type="text" value={item.enonce} onChange={e => updateItem(i, 'enonce', e.target.value)}
+                      placeholder={`Énoncé item ${item.label}`}
+                      disabled={item.neutralisee}
+                      className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-400" />
+                    <input type="text" value={item.justification} onChange={e => updateItem(i, 'justification', e.target.value)}
+                      placeholder="Justification (optionnel)"
+                      disabled={item.neutralisee}
+                      className="border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-blue-400 text-slate-500 disabled:bg-slate-50 disabled:text-slate-400" />
+                  </div>
+                </div>
+                {/* Checkbox neutralisée */}
+                <div className="flex items-center gap-2 mt-2 ml-9">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={item.neutralisee ?? false}
+                      onChange={e => updateItemNeutralisee(i, e.target.checked)}
+                      className="w-3.5 h-3.5 accent-slate-500 rounded"
+                    />
+                    <span className="text-xs text-slate-500">Neutralisé — ne compte pas dans la correction</span>
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>}
+      )}
+
+      {/* ── Réponses correctes (QCM / QRU uniquement) ── */}
+      {(type === 'QCM' || type === 'QRU') && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">
+            Réponses correctes *
+            {type === 'QRU' && <span className="ml-1 font-normal text-slate-400">(une seule)</span>}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {items.map(item => (
+              <button key={item.label} onClick={() => toggleReponse(item.label)}
+                disabled={item.neutralisee}
+                title={item.neutralisee ? 'Item neutralisé — ne peut pas être juste' : undefined}
+                className={`w-10 h-10 rounded-xl font-bold text-sm transition-all ${
+                  item.neutralisee
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                    : reponses.includes(item.label)
+                      ? 'bg-green-500 text-white'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Note de correction ── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5">
