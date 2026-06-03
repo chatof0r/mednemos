@@ -11,7 +11,7 @@ create table if not exists public.questions (
   matiere     text not null,
   cours       text,
   annee       int,
-  type        text not null check (type in ('QCM', 'QRU')),
+  type        text not null check (type in ('QCM', 'QRU', 'QZONE', 'QROC', 'QS')),
   enonce      text not null,
   image_url   text,
   items       jsonb not null default '[]'::jsonb,
