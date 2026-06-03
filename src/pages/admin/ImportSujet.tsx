@@ -12,8 +12,9 @@ interface ParsedQuestion {
   type: 'QCM' | 'QRU';
   enonce: string;
   items: Item[];
-  reponses: string[];       // lettres correctes (☑)
-  noteCorrection: string;   // commentaire de correction
+  reponses: string[];       // lettres correctes
+  noteCorrection: string;   // commentaire de correction (sans [INSERER IMAGE])
+  needsImage: boolean;      // true si [INSERER IMAGE] était présent → image_url = '__PENDING__'
 }
 
 interface ParsedSection {
@@ -159,6 +160,7 @@ function parseProfFormat(raw: string): ParsedQuestion[] {
       items,
       reponses,
       noteCorrection: noteLines.join('\n'),
+      needsImage: false,
     });
   }
 
@@ -203,7 +205,126 @@ function parseOldFormat(raw: string): ParsedQuestion[] {
       }
     }
 
-    questions.push({ numero, type: qType, enonce, items, reponses: [], noteCorrection: '' });
+    questions.push({ numero, type: qType, enonce, items, reponses: [], noteCorrection: '', needsImage: false });
+  }
+
+  return questions;
+}
+
+// ---------------------------------------------------------------------------
+// Parser — format Claude : "QCM N : énoncé \n A. item \n Réponse : XYZ \n Note : ..."
+// Produit par le prompt de standardisation (Dossier DL/DP/DQI N)
+// ---------------------------------------------------------------------------
+
+function parseClaudeQuestions(raw: string): ParsedQuestion[] {
+  // Normalisation : unifier sauts de ligne + NFC pour les accents composés
+  // On normalise aussi les espaces insécables (U+00A0, U+202F) en espaces ordinaires
+  // car certains PDF/LLM en insèrent, ce qui casse les regex d'ancre ^
+  const text = raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[\u00A0\u202F\u2009\u2060\uFEFF]/g, ' ')  // NBSP & espaces spéciaux → espace ordinaire
+    .normalize('NFC');
+
+  // En-têtes de question : "QCM N :", "QRU N :", "QROC N :" en début de ligne
+  // On tolère des espaces éventuels en tête de ligne (indentation)
+  const Q_RE = /^[ \t]*(QCM|QRU|QROC)\s+(\d+)\s*:/gim;
+  const qMatches = [...text.matchAll(Q_RE)];
+  if (qMatches.length === 0) return [];
+
+  const questions: ParsedQuestion[] = [];
+
+  for (let i = 0; i < qMatches.length; i++) {
+    const qm       = qMatches[i];
+    const rawType  = qm[1].toUpperCase();
+    const type: 'QCM' | 'QRU' = rawType === 'QRU' ? 'QRU' : 'QCM'; // QROC → QCM
+    const numero   = parseInt(qm[2], 10);
+    const blockStart = qm.index! + qm[0].length;
+    const blockEnd   = i + 1 < qMatches.length ? qMatches[i + 1].index! : text.length;
+    const block      = text.slice(blockStart, blockEnd);
+
+    // ── Réponses correctes — cherche dans le bloc entier ──────────────────────
+    // On cherche DANS BLOCK (pas bodyAfterEnonce) pour être indépendant du
+    // calcul des items. Tolère espaces, "Réponse/Réponses/Correction", accents.
+    const reponseMatch = /^[ \t]*(?:R[eé]ponses?|Correction)\s*:\s*([A-H][A-H ,]*)/im.exec(block);
+    const reponses: string[] = reponseMatch
+      ? reponseMatch[1].toUpperCase().split('').filter(c => /[A-H]/.test(c))
+      : [];
+
+    // ── Note de correction — cherche dans le bloc entier ─────────────────────
+    const noteMatch = /^[ \t]*Note\s*:\s*(.+)/im.exec(block);
+    let rawNote = noteMatch ? noteMatch[1].trim() : '';
+
+    // Détecter et extraire le marqueur [INSERER IMAGE]
+    const needsImage = /\[INSERER\s+IMAGE\]/i.test(rawNote);
+    rawNote = rawNote.replace(/\[INSERER\s+IMAGE\]/gi, '').trim();
+
+    // "non" → note vide
+    const noteCorrection = rawNote.toLowerCase() === 'non' ? '' : rawNote;
+
+    // ── Énoncé : texte avant le premier item "A." ─────────────────────────────
+    const firstItemIdx = block.search(/^[ \t]*[A-H]\./m);
+    let enonce = '';
+
+    if (firstItemIdx !== -1) {
+      enonce = block.slice(0, firstItemIdx)
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    // ── Items : entre le premier item et la ligne Réponse ────────────────────
+    const reponseLineStart = reponseMatch
+      ? block.indexOf(reponseMatch[0])
+      : block.length;
+    const itemsText = block.slice(
+      firstItemIdx !== -1 ? firstItemIdx : 0,
+      reponseLineStart,
+    );
+
+    const items: Item[] = [];
+    let currentLabel: string | null = null;
+    let currentLines: string[] = [];
+
+    for (const line of itemsText.split('\n')) {
+      // Tolère l'indentation éventuelle devant "A. texte"
+      const m = line.match(/^[ \t]*([A-H])\.\s*(.*)/);
+      if (m) {
+        if (currentLabel !== null) {
+          items.push({
+            label:         currentLabel,
+            enonce:        currentLines.join(' ').replace(/\s+/g, ' ').trim(),
+            justification: '',
+          });
+        }
+        currentLabel = m[1];
+        currentLines = [m[2]];
+      } else if (currentLabel !== null && line.trim()) {
+        currentLines.push(line.trim());
+      }
+    }
+    if (currentLabel !== null && currentLines.length > 0) {
+      items.push({
+        label:         currentLabel,
+        enonce:        currentLines.join(' ').replace(/\s+/g, ' ').trim(),
+        justification: '',
+      });
+    }
+
+    // ── Justifications par item depuis la Note ────────────────────────────────
+    // Format : "A — Localisées ; D — Obstructif et restrictif"
+    if (noteCorrection) {
+      const parts = noteCorrection.split(/\s*[;,]\s*/);
+      for (const part of parts) {
+        const jm = part.match(/^([A-H])\s*[—–\-]+\s*(.+)/);
+        if (jm) {
+          const item = items.find(it => it.label === jm[1]);
+          if (item) item.justification = jm[2].trim();
+        }
+      }
+    }
+
+    questions.push({ numero, type, enonce, items, reponses, noteCorrection, needsImage });
   }
 
   return questions;
@@ -214,6 +335,8 @@ function parseOldFormat(raw: string): ParsedQuestion[] {
 // ---------------------------------------------------------------------------
 
 function parseQuestions(raw: string): ParsedQuestion[] {
+  // Format Claude : "QCM N :" / "QRU N :" / "QROC N :" — tolère indentation
+  if (/^[ \t]*(?:QCM|QRU|QROC)\s+\d+\s*:/im.test(raw)) return parseClaudeQuestions(raw);
   const isProfFormat = /Question\s+\d+\s+Pondération/i.test(raw);
   return isProfFormat ? parseProfFormat(raw) : parseOldFormat(raw);
 }
@@ -223,15 +346,123 @@ function parseQuestions(raw: string): ParsedQuestion[] {
 // ---------------------------------------------------------------------------
 
 function parseSections(raw: string): ParsedSection[] {
-  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const text = raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[\u00A0\u202F\u2009\u2060\uFEFF]/g, ' ');  // NBSP & espaces spéciaux → espace ordinaire
 
-  // Repérer les en-têtes de section : "Dossier N..." ou "Questions isolées..."
-  // Doit être en début de ligne (précédé par newline ou début de texte)
+  // ── 0. Format Claude : en-têtes "Dossier DL/DP/DQI N [titre optionnel] :" ──
+  // Exemple : "Dossier DQI 1 :" ou "Dossier DQI 2 (Histologie) :"
+  const CLAUDE_SECTION_RE = /(?:^|\n)(Dossier\s+(DL|DP|DQI)\s+\d+[^\n:]*)\s*:/gi;
+  const claudeMatches = [...text.matchAll(CLAUDE_SECTION_RE)];
+
+  if (claudeMatches.length > 0) {
+    const sections: ParsedSection[] = [];
+
+    for (let i = 0; i < claudeMatches.length; i++) {
+      const sm         = claudeMatches[i];
+      const headerText = sm[1].trim();
+      const dossierType = sm[2].toUpperCase() as 'DL' | 'DP' | 'DQI';
+      const contentStart = sm.index! + sm[0].length;
+      const contentEnd   = i + 1 < claudeMatches.length
+        ? claudeMatches[i + 1].index!
+        : text.length;
+      const content = text.slice(contentStart, contentEnd);
+
+      // DQI → isolees (questions indépendantes sans dossier DB)
+      // DP  → dossier progressif
+      // DL  → dossier libre
+      const type: 'dp' | 'dl' | 'isolees' =
+        dossierType === 'DP' ? 'dp' :
+        dossierType === 'DL' ? 'dl' : 'isolees';
+
+      // Extraire le contexte clinique (DP/DL) : texte avant le premier QCM/QRU
+      const firstQIdx = content.search(/^(?:QCM|QRU|QROC)\s+\d+\s*:/im);
+      let enonce = '';
+      let questionsText = content;
+
+      if (firstQIdx !== -1) {
+        enonce = content.slice(0, firstQIdx)
+          .replace(/[ \t]+/g, ' ')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        questionsText = content.slice(firstQIdx);
+      }
+
+      sections.push({
+        id: `s${i}`,
+        type,
+        titre: headerText,
+        enonce,
+        questions: parseClaudeQuestions(questionsText),
+      });
+    }
+
+    return sections;
+  }
+
+  // ── 1. Chercher les en-têtes explicites "Dossier N" / "Questions isolées" ──
   const SECTION_RE = /(?:^|\n)(Dossier\s+\d+[^\n]*|Questions?\s+isolées?[^\n]*)\n/gi;
   const sectionMatches = [...text.matchAll(SECTION_RE)];
 
-  // Pas de sections → flat parse
-  if (sectionMatches.length === 0) {
+  if (sectionMatches.length > 0) {
+    const sections: ParsedSection[] = [];
+
+    for (let i = 0; i < sectionMatches.length; i++) {
+      const sm = sectionMatches[i];
+      const headerText = sm[1].trim();
+      const contentStart = sm.index! + sm[0].length;
+      const contentEnd = i + 1 < sectionMatches.length
+        ? sectionMatches[i + 1].index!
+        : text.length;
+      const content = text.slice(contentStart, contentEnd);
+
+      const isDossier = /^Dossier\s+\d+/i.test(headerText);
+
+      // Extraire le contexte clinique : texte avant la première "Question N Pondération"
+      const firstQIdx = content.search(/Question\s+\d+\s+Pondération/i);
+      let enonce = '';
+      let questionsText = content;
+
+      if (firstQIdx !== -1) {
+        enonce = content.slice(0, firstQIdx)
+          .replace(/[ \t]+/g, ' ')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        questionsText = content.slice(firstQIdx);
+      }
+
+      sections.push({
+        id: `s${i}`,
+        type: isDossier ? 'dp' : 'isolees',
+        titre: headerText,
+        enonce,
+        questions: parseQuestions(questionsText),
+      });
+    }
+
+    return sections;
+  }
+
+  // ── 2. Fallback : détecter les resets de numérotation (Q1 après Q2+) ──
+  // S'applique uniquement au format prof "Question N Pondération"
+  const Q_HEADER_RE = /(?:^|\n)[ \t]*Question\s+(\d+)\s+Pondération/gi;
+  const qHeaderMatches = [...text.matchAll(Q_HEADER_RE)];
+
+  // splitPoints[0] = 0 (début du texte), puis chaque reset de Q1
+  const splitPoints: number[] = [0];
+  let lastNum = 0;
+  for (const m of qHeaderMatches) {
+    const num = parseInt(m[1], 10);
+    if (num === 1 && lastNum > 1) {
+      // Reset : nouvelle section commence ici (on pointe sur le \n ou le début)
+      splitPoints.push(m.index!);
+    }
+    lastNum = num;
+  }
+
+  if (splitPoints.length === 1) {
+    // Pas de reset → section unique
     const questions = parseQuestions(raw);
     return [{
       id: 's0',
@@ -242,20 +473,15 @@ function parseSections(raw: string): ParsedSection[] {
     }];
   }
 
-  const sections: ParsedSection[] = [];
+  // Plusieurs blocs détectés par reset de numérotation
+  const autoSections: ParsedSection[] = [];
 
-  for (let i = 0; i < sectionMatches.length; i++) {
-    const sm = sectionMatches[i];
-    const headerText = sm[1].trim();
-    const contentStart = sm.index! + sm[0].length;
-    const contentEnd = i + 1 < sectionMatches.length
-      ? sectionMatches[i + 1].index!
-      : text.length;
-    const content = text.slice(contentStart, contentEnd);
+  for (let i = 0; i < splitPoints.length; i++) {
+    const start = splitPoints[i];
+    const end   = i + 1 < splitPoints.length ? splitPoints[i + 1] : text.length;
+    const content = text.slice(start, end);
 
-    const isDossier = /^Dossier\s+\d+/i.test(headerText);
-
-    // Extraire le contexte clinique : texte avant la première "Question N Pondération"
+    // Extraire le contexte clinique : texte avant la première question
     const firstQIdx = content.search(/Question\s+\d+\s+Pondération/i);
     let enonce = '';
     let questionsText = content;
@@ -268,18 +494,16 @@ function parseSections(raw: string): ParsedSection[] {
       questionsText = content.slice(firstQIdx);
     }
 
-    const questions = parseQuestions(questionsText);
-
-    sections.push({
+    autoSections.push({
       id: `s${i}`,
-      type: isDossier ? 'dp' : 'isolees',
-      titre: headerText,
+      type: 'dp' as const,       // défaut DP — l'utilisateur peut changer via le toggle
+      titre: `Dossier ${i + 1}`, // titre provisoire
       enonce,
-      questions,
+      questions: parseQuestions(questionsText),
     });
   }
 
-  return sections;
+  return autoSections;
 }
 
 // ---------------------------------------------------------------------------
@@ -341,6 +565,8 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
     setSaveError(null);
 
     let savedCount = 0;
+    // Numérotation séquentielle inter-sections pour les isolées
+    let isoléesSaveOffset = 0;
 
     for (const section of sections) {
       if (section.type === 'dp' || section.type === 'dl') {
@@ -394,7 +620,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               reponses:        q.reponses,
               note_correction: q.noteCorrection || null,
               cours:           null,
-              image_url:       null,
+              image_url:       q.needsImage ? '__PENDING__' : null,
               hotspot:         null,
               statut,
               numero_officiel: source === 'ronéo' ? null : q.numero,
@@ -417,8 +643,12 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
         }
       } else {
         // Questions isolées → sans dossier
+        // Numéroter en séquence : si plusieurs sections isolées, la 2e commence après la 1re
         for (let i = 0; i < section.questions.length; i++) {
           const q = section.questions[i];
+          const adjNum = q.numero !== null
+            ? q.numero + isoléesSaveOffset
+            : i + 1 + isoléesSaveOffset;
           try {
             const { error } = await supabase.from('questions').insert({
               niveau,
@@ -432,27 +662,29 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               reponses:        q.reponses,
               note_correction: q.noteCorrection || null,
               cours:           null,
-              image_url:       null,
+              image_url:       q.needsImage ? '__PENDING__' : null,
               hotspot:         null,
               statut,
-              numero_officiel: source === 'ronéo' ? null : q.numero,
+              numero_officiel: source === 'ronéo' ? null : adjNum,
               dossier_id:      null,
               ordre_dossier:   null,
             }).select().single();
             if (error) {
-              setSaveError(`Q${i + 1} : ${error.message}`);
+              setSaveError(`Q${adjNum} : ${error.message}`);
               setSaving(false);
               return;
             }
           } catch (e: unknown) {
             const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-            setSaveError(`Q${i + 1} : ${msg}`);
+            setSaveError(`Q${adjNum} : ${msg}`);
             setSaving(false);
             return;
           }
           savedCount++;
           setSaveProgress(savedCount);
         }
+        // Avancer l'offset pour la prochaine section isolées
+        isoléesSaveOffset += section.questions.length;
       }
     }
 
@@ -468,7 +700,20 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
   // Une section "dossier" = type dp ou dl
   const hasDossierSections = sections.some(s => s.type === 'dp' || s.type === 'dl');
   const hasCorrections     = totalWithCorrections > 0;
-  // Mode plat = une seule section isolées (pas de sections dossier détectées)
+  // Afficher la vue par sections dès qu'il y a plusieurs sections OU au moins un dossier
+  const showSectionView    = sections.length > 1 || hasDossierSections;
+
+  // Offsets de numérotation pour les questions isolées (numérotation séquentielle inter-sections)
+  const isoléesOffsets: Record<string, number> = {};
+  {
+    let running = 0;
+    for (const s of sections) {
+      if (s.type === 'isolees') {
+        isoléesOffsets[s.id] = running;
+        running += s.questions.length;
+      }
+    }
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -489,7 +734,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           <p className="text-xs text-slate-400 mt-0.5">
             {step === 'input'
               ? 'Collez un sujet entier — les questions seront détectées automatiquement'
-              : hasDossierSections
+              : showSectionView
                 ? `${sections.filter(s => s.type !== 'isolees').length} dossier${sections.filter(s => s.type !== 'isolees').length > 1 ? 's' : ''} · ${totalQuestions} question${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`
                 : `${totalQuestions} question${totalQuestions > 1 ? 's' : ''} détectée${totalQuestions > 1 ? 's' : ''}${hasCorrections ? ` · ${totalWithCorrections} avec corrections` : ''}`}
           </p>
@@ -605,7 +850,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
             <span className={totalWarnings > 0 ? 'text-amber-700' : 'text-green-700'}>
               <strong>{totalQuestions}</strong> question{totalQuestions > 1 ? 's' : ''} — <strong>{matiere}</strong>
               {source !== 'ronéo' && <> · {annee}.S{session}</>} · {niveau}
-              {hasDossierSections && (
+              {showSectionView && sections.some(s => s.type !== 'isolees') && (
                 <> · <strong>{sections.filter(s => s.type !== 'isolees').length}</strong> dossier{sections.filter(s => s.type !== 'isolees').length > 1 ? 's' : ''}</>
               )}
               {hasCorrections && <> · <span className="text-green-600 font-semibold">{totalWithCorrections} avec corrections</span></>}
@@ -616,7 +861,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           </div>
 
           {/* ── Sections avec dossiers ── */}
-          {hasDossierSections ? (
+          {showSectionView ? (
             <div className="space-y-3">
               {sections.map(section => {
                 const sectionWarnings = section.questions.filter(q => q.items.length === 0).length;
@@ -635,6 +880,9 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                           {section.questions.length} question{section.questions.length > 1 ? 's' : ''}
                           {sectionCorrections > 0 && <span className="text-green-600"> · {sectionCorrections} corrigée{sectionCorrections > 1 ? 's' : ''}</span>}
                           {sectionWarnings > 0 && <span className="text-amber-500"> · ⚠ {sectionWarnings}</span>}
+                          {section.questions.some(q => q.needsImage) && (
+                            <span className="text-orange-500"> · 🖼 {section.questions.filter(q => q.needsImage).length} image{section.questions.filter(q => q.needsImage).length > 1 ? 's' : ''} à insérer</span>
+                          )}
                         </span>
                       </div>
 
@@ -669,10 +917,16 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
 
                     {/* Questions */}
                     <div className="divide-y divide-slate-100">
-                      {section.questions.map((q, qIdx) => (
+                      {section.questions.map((q, qIdx) => {
+                        // Pour les sections isolées, numérotation séquentielle inter-sections
+                        const baseNum = q.numero ?? qIdx + 1;
+                        const displayNum = section.type === 'isolees'
+                          ? baseNum + (isoléesOffsets[section.id] ?? 0)
+                          : baseNum;
+                        return (
                         <div key={qIdx} className={`px-4 py-2.5 flex items-start gap-3 ${q.items.length === 0 ? 'bg-amber-50' : ''}`}>
                           <span className="text-xs font-mono font-semibold text-slate-400 pt-0.5 w-6 shrink-0 text-right">
-                            {q.numero ?? qIdx + 1}
+                            {displayNum}
                           </span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-slate-700 leading-snug truncate">
@@ -692,11 +946,15 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                                     </span>
                                   ))}
                                 </div>
-                                {q.reponses.length > 0 && (
-                                  <span className="text-xs text-green-600">✓ {q.reponses.join('')}</span>
-                                )}
+                                {q.reponses.length > 0
+                                  ? <span className="text-xs text-green-600 font-medium">✓ {q.reponses.join('')}</span>
+                                  : <span className="text-xs text-slate-300">sans réponse</span>
+                                }
                                 {q.noteCorrection && (
                                   <span className="text-xs text-blue-500">📝</span>
+                                )}
+                                {q.needsImage && (
+                                  <span className="text-xs bg-orange-100 text-orange-600 font-semibold px-1.5 py-0.5 rounded">🖼 image</span>
                                 )}
                               </div>
                             ) : (
@@ -711,7 +969,8 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                             {q.type}
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -746,11 +1005,15 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
                               </span>
                             ))}
                           </div>
-                          {q.reponses.length > 0 && (
-                            <span className="text-xs text-green-600">✓ {q.reponses.join('')}</span>
-                          )}
+                          {q.reponses.length > 0
+                            ? <span className="text-xs text-green-600 font-medium">✓ {q.reponses.join('')}</span>
+                            : <span className="text-xs text-slate-300">sans réponse</span>
+                          }
                           {q.noteCorrection && (
                             <span className="text-xs text-blue-500 ml-1">📝</span>
+                          )}
+                          {q.needsImage && (
+                            <span className="text-xs bg-orange-100 text-orange-600 font-semibold px-1.5 py-0.5 rounded ml-1">🖼 image</span>
                           )}
                         </div>
                       ) : (
@@ -814,7 +1077,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
           </div>
 
           <p className="text-xs text-slate-400">
-            {hasDossierSections
+            {sections.some(s => s.type !== 'isolees')
               ? `${sections.filter(s => s.type !== 'isolees').length} dossier${sections.filter(s => s.type !== 'isolees').length > 1 ? 's' : ''} seront créés${sections.some(s => s.type === 'isolees') ? ' + questions isolées' : ''}.${hasCorrections ? ' Corrections incluses, publication directe possible.' : ''}`
               : hasCorrections
                 ? `${totalWithCorrections}/${totalQuestions} questions ont des corrections — tu peux publier directement.`

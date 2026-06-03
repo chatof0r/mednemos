@@ -279,34 +279,51 @@ function QuestionCard({ question, selected, validated, onToggle, onValidate, onN
             const isSelected = selected.includes(item.label);
             const isExpanded = expandedItems.has(item.label);
 
+            const isCorrect  = question.reponses.includes(item.label);
+
+            // Après validation :
+            //   • toutes les bonnes réponses → vert (sélectionnées ou non)
+            //   • mauvaises réponses sélectionnées → rouge
+            //   • items neutres → grisés
             const containerClass = !validated
-              ? isSelected ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5' : 'border-slate-200 dark:border-white/10 bg-white dark:bg-transparent hover:border-slate-300 dark:hover:border-white/20'
-              : state === 'correct-checked' ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
-                : state === 'incorrect-checked' ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
-                  : state === 'correct-missed' ? 'border-green-600/60 dark:border-green-400/40 bg-green-100/80 dark:bg-green-500/20'
-                    : 'border-slate-200/60 dark:border-white/8 bg-white/50 dark:bg-transparent';
+              ? isSelected
+                ? 'border-[#e3fe52]/50 dark:border-[#e3fe52]/40 bg-[#e3fe52]/5'
+                : 'border-slate-200 dark:border-white/10 bg-white dark:bg-transparent hover:border-slate-300 dark:hover:border-white/20'
+              : isCorrect
+                ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
+                : isSelected
+                  ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
+                  : 'border-slate-200/60 dark:border-white/8 bg-white/50 dark:bg-transparent';
 
             const iconBg = !validated
-              ? isSelected ? 'border-[#e3fe52] bg-[#e3fe52]' : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent'
-              : state === 'correct-checked' ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
-                : state === 'incorrect-checked' ? 'border-red-500 bg-red-500'
-                  : state === 'correct-missed' ? 'border-green-600 bg-green-600 dark:border-green-400 dark:bg-green-500/50'
-                    : 'border-slate-300/60 dark:border-white/15 bg-white/50 dark:bg-transparent';
+              ? isSelected
+                ? 'border-[#e3fe52] bg-[#e3fe52]'
+                : 'border-slate-300 dark:border-white/20 bg-white dark:bg-transparent'
+              : isCorrect
+                ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
+                : isSelected
+                  ? 'border-red-500 bg-red-500'
+                  : 'border-slate-200/60 dark:border-white/10 bg-white/50 dark:bg-transparent';
 
-            const labelColor = !validated ? 'text-slate-700 dark:text-white/70'
-              : state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
-                : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
-                  : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
-                    : 'text-slate-400 dark:text-white/30';
+            const labelColor = !validated
+              ? 'text-slate-700 dark:text-white/70'
+              : isCorrect
+                ? 'text-green-700 dark:text-green-400'
+                : isSelected
+                  ? 'text-red-700 dark:text-red-400'
+                  : 'text-slate-400 dark:text-white/30';
 
-            const textColor = !validated ? 'text-slate-700 dark:text-white'
-              : state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
-                : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
-                  : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
-                    : 'text-slate-500 dark:text-white/40';
+            const textColor = !validated
+              ? 'text-slate-700 dark:text-white'
+              : isCorrect
+                ? 'text-green-700 dark:text-green-400'
+                : isSelected
+                  ? 'text-red-700 dark:text-red-400'
+                  : 'text-slate-400 dark:text-white/35';
 
-            const showCheck = !validated ? isSelected : (state === 'correct-checked' || state === 'incorrect-missed');
-            const showX = validated && (state === 'incorrect-checked' || state === 'correct-missed');
+            // ✓ vert sur toutes les bonnes réponses ; ✗ rouge sur les mauvaises sélectionnées
+            const showCheck = !validated ? isSelected : isCorrect;
+            const showX     = validated && isSelected && !isCorrect;
 
             return (
               <div key={item.label} className={`rounded-xl border transition-all overflow-hidden ${containerClass}`}>
@@ -468,6 +485,8 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
             let showX = false;
             let isExpanded = expandedItems.has(item.label);
 
+            const isCorrect = question.reponses.includes(item.label);
+
             if (!isValidated) {
               // Interactif
               containerClass = isSelected
@@ -487,27 +506,28 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
               textColor = 'text-slate-600 dark:text-white/50';
               showCheck = isSelected;
             } else {
-              // Corrections visibles
-              const state = getItemState(item.label, selected, question.reponses, true);
-              containerClass = state === 'correct-checked'
+              // Corrections visibles :
+              //   • bonne réponse (sélectionnée ou non) → vert + ✓
+              //   • mauvaise réponse sélectionnée → rouge + ✗
+              //   • item neutre → grisé, sans icône
+              containerClass = isCorrect
                 ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
-                : state === 'incorrect-checked'
+                : isSelected
                   ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
-                  : state === 'correct-missed'
-                    ? 'border-green-600/60 dark:border-green-400/40 bg-green-100/80 dark:bg-green-500/20'
-                    : 'border-slate-200/60 dark:border-white/8 opacity-50';
-              iconBg = state === 'correct-checked'
-                ? 'border-green-400 bg-green-400 dark:bg-green-500/80'
-                : state === 'incorrect-checked' ? 'border-red-500 bg-red-500'
-                  : state === 'correct-missed' ? 'border-green-600 bg-green-600 dark:bg-green-500/50'
-                    : 'border-slate-300/60 bg-white/50 dark:bg-transparent';
-              labelColor = state === 'correct-checked' ? 'text-green-700 dark:text-green-400'
-                : state === 'incorrect-checked' ? 'text-red-700 dark:text-red-400'
-                  : state === 'correct-missed' ? 'text-green-800 dark:text-green-300'
-                    : 'text-slate-400 dark:text-white/30';
+                  : 'border-slate-200/60 dark:border-white/8 opacity-50';
+              iconBg = isCorrect
+                ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
+                : isSelected
+                  ? 'border-red-500 bg-red-500'
+                  : 'border-slate-300/60 bg-white/50 dark:bg-transparent';
+              labelColor = isCorrect
+                ? 'text-green-700 dark:text-green-400'
+                : isSelected
+                  ? 'text-red-700 dark:text-red-400'
+                  : 'text-slate-400 dark:text-white/30';
               textColor = labelColor;
-              showCheck = state === 'correct-checked' || state === 'incorrect-missed';
-              showX = state === 'incorrect-checked' || state === 'correct-missed';
+              showCheck = isCorrect;
+              showX = isSelected && !isCorrect;
             }
 
             return (

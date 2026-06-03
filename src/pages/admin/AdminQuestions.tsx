@@ -6,8 +6,13 @@ import ImportSujet from './ImportSujet';
 
 type View = 'list' | 'create' | 'edit' | 'import';
 
+// Question enrichie avec son dossier (si applicable)
+type QuestionWithDossier = Question & {
+  dossiers?: { id: string; titre: string; type_dossier: 'dp' | 'dl' } | null;
+};
+
 export default function AdminQuestions() {
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<QuestionWithDossier[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('list');
   const [editing, setEditing] = useState<Question | null>(null);
@@ -30,12 +35,12 @@ export default function AdminQuestions() {
     setLoading(true);
     const { data, error } = await supabase
       .from('questions')
-      .select('*')
+      .select('*, dossiers(id, titre, type_dossier)')
       .order('annee', { ascending: false, nullsFirst: false })
       .order('session', { ascending: true, nullsFirst: false })
       .order('numero_officiel', { ascending: true, nullsFirst: false });
     if (error) console.error('load error:', error);
-    setQuestions((data ?? []) as Question[]);
+    setQuestions((data ?? []) as QuestionWithDossier[]);
     setLoading(false);
   };
 
@@ -372,7 +377,7 @@ export default function AdminQuestions() {
           {/* Calcul des groupes depuis `filtered` (ordre déjà trié par DB) */}
           {(() => {
             // Build ordered groups
-            type Group = { key: string; label: string; questions: Question[] };
+            type Group = { key: string; label: string; questions: QuestionWithDossier[] };
             const groups: Group[] = [];
             const seen = new Map<string, number>();
             for (const q of filtered) {
@@ -435,7 +440,7 @@ export default function AdminQuestions() {
                   {/* Group rows */}
                   {isOpen && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm min-w-[600px]">
+                      <table className="w-full text-sm min-w-[720px]">
                         <tbody>
                           {group.questions.map(q => {
                             const shortYear = q.annee ? String(q.annee).slice(-2) : '?';
@@ -443,6 +448,8 @@ export default function AdminQuestions() {
                               ? `Q${q.numero_officiel} / ${shortYear}${q.session ? `.${q.session}` : ''}`
                               : q.annee ? `${shortYear}${q.session ? `.${q.session}` : ''}` : '—';
                             const isSelected = selected.has(q.id);
+                            const pendingImage = q.image_url === '__PENDING__';
+                            const dossier = q.dossiers ?? null;
                             return (
                               <tr key={q.id} className={`border-t border-slate-100 transition-colors ${isSelected ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}>
                                 {/* Checkbox */}
@@ -462,8 +469,18 @@ export default function AdminQuestions() {
                                     </div>
                                   </div>
                                 </td>
+                                {/* Ref + indicateur image manquante */}
                                 <td className="py-2.5 pl-1 pr-3">
-                                  <span className="text-xs font-mono font-medium text-slate-500">{ref}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-mono font-medium text-slate-500">{ref}</span>
+                                    {pendingImage && (
+                                      <span title="Image à insérer" className="inline-flex items-center justify-center w-4 h-4 rounded bg-orange-100 text-orange-500 shrink-0">
+                                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="py-2.5 pr-3">
                                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
@@ -471,7 +488,25 @@ export default function AdminQuestions() {
                                   }`}>{q.niveau}</span>
                                 </td>
                                 <td className="py-2.5 pr-3 text-slate-700 max-w-[140px] truncate text-xs">{q.matiere}</td>
-                                <td className="py-2.5 pr-3 text-slate-500 max-w-[140px] truncate text-xs">{q.cours?.join(', ') ?? '—'}</td>
+                                {/* Dossier : badge type + titre tronqué */}
+                                <td className="py-2.5 pr-3 max-w-[160px]">
+                                  {dossier ? (
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded ${
+                                        dossier.type_dossier === 'dl'
+                                          ? 'bg-teal-100 text-teal-700'
+                                          : 'bg-amber-100 text-amber-700'
+                                      }`}>
+                                        {dossier.type_dossier.toUpperCase()}
+                                      </span>
+                                      <span className="text-xs text-slate-500 truncate" title={dossier.titre}>
+                                        {dossier.titre}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-slate-300">—</span>
+                                  )}
+                                </td>
                                 <td className="py-2.5 pr-3">
                                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
                                     q.type === 'QCM' ? 'bg-violet-100 text-violet-700'
