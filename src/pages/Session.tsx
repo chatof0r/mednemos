@@ -80,8 +80,11 @@ function scoreForQuestion(q: Question, sel: string[]): number {
     return 0;
   }
   if (q.type === 'QRU') {
+    if (q.reponses.length === 0) return 0;
     return sel.length === 1 && sel[0] === q.reponses[0] ? 1 : 0;
   }
+  // QCM — pas de bonne réponse définie → jamais notable, même sans sélection
+  if (q.reponses.length === 0) return 0;
   // QCM — les items neutralisés ne comptent pas dans les erreurs
   const errors = q.items.filter(i => {
     if (i.neutralisee) return false;
@@ -939,6 +942,7 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
               const sel = answers[q.id] ?? [];
               const pts = scoreForQuestion(q, sel);
               const errorItems = q.items.filter(i => {
+                if (i.neutralisee) return false;
                 const s = getItemState(i.label, sel, q.reponses, true);
                 return s === 'incorrect-checked' || s === 'correct-missed';
               });

@@ -32,16 +32,14 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=https://xxxxxxxxxxxxxxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-VITE_ADMIN_PIN=1234
 ```
-
-> **Note** : `VITE_ADMIN_PIN` est le code PIN à 4 chiffres pour accéder à l'interface d'administration. Choisissez un PIN sécurisé avant le déploiement en production.
 
 ### 3. Configurer Supabase
 
 1. Créer un projet sur [supabase.com](https://supabase.com)
 2. Dans **SQL Editor**, exécuter le contenu de `supabase/schema.sql`
 3. Récupérer l'URL et la clé anon dans **Settings > API**
+4. Créer le compte administrateur : **Authentication > Users > Add user**, renseigner un email et un mot de passe (décochez "Auto confirm user" uniquement si vous voulez gérer la confirmation par email). C'est ce compte qui donne accès à l'interface `/admin` — il n'y a plus de PIN.
 
 > Le bucket de stockage `question-images` est créé automatiquement par le script SQL. Si vous avez une erreur, créez-le manuellement dans **Storage** en cochant "Public bucket".
 
@@ -74,7 +72,6 @@ git push -u origin main
 3. Dans **Environment Variables**, ajouter :
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_ADMIN_PIN`
 4. Cliquer **Deploy**
 
 ### 3. Configurer les URLs autorisées dans Supabase
@@ -90,7 +87,7 @@ src/
 ├── components/
 │   ├── Navbar.tsx          # Barre de navigation
 │   ├── AboutModal.tsx      # Modal "À propos" + suggestions
-│   └── PinModal.tsx        # Modal de saisie du PIN admin
+│   └── AdminLoginModal.tsx # Modal de connexion admin (Supabase Auth)
 ├── lib/
 │   └── supabase.ts         # Client Supabase
 ├── pages/
@@ -117,15 +114,15 @@ supabase/
 
 1. Cliquer sur le **logo** dans la navbar pour ouvrir la modal "À propos"
 2. Cliquer sur **Administrateur**
-3. Saisir le code PIN défini dans `VITE_ADMIN_PIN`
+3. Se connecter avec l'email et le mot de passe du compte admin (créé dans Supabase, voir ci-dessus)
 4. Redirection automatique vers `/admin`
 
-L'authentification admin est gérée côté client via `sessionStorage`. Elle s'efface à la fermeture du navigateur.
+L'authentification est gérée par **Supabase Auth** (session JWT, persistée par le SDK). La déconnexion invalide la session côté Supabase.
 
 ---
 
 ## Sécurité
 
-- Le PIN est vérifié côté client uniquement. Pour un usage sérieux, envisagez d'utiliser Supabase Auth.
-- Les questions en brouillon ne sont jamais exposées aux étudiants (filtrage côté client + RLS côté Supabase).
+- L'accès en écriture (création/modification/suppression de questions, dossiers, suggestions, images) est protégé par les policies RLS de Supabase, qui exigent une session authentifiée (`to authenticated`) — la clé anon seule ne permet plus que la lecture des contenus publiés et l'envoi de suggestions.
+- Les questions et dossiers en brouillon ne sont jamais exposés aux étudiants (RLS : `statut = 'publiee'` uniquement).
 - Aucune donnée personnelle n'est collectée.

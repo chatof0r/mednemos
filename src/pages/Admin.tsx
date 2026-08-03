@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import AdminQuestions from './admin/AdminQuestions';
 import AdminSuggestions from './admin/AdminSuggestions';
 import AdminDossiers from './admin/AdminDossiers';
@@ -9,19 +10,31 @@ type Tab = 'questions' | 'dossiers' | 'suggestions';
 export default function Admin() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('questions');
+  const [checking, setChecking] = useState(true);
+  const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem('admin_auth') !== 'true') {
-      navigate('/', { replace: true });
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate('/', { replace: true });
+      } else {
+        setAuthed(true);
+      }
+      setChecking(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) navigate('/', { replace: true });
+    });
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('admin_auth');
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     navigate('/');
   };
 
-  if (sessionStorage.getItem('admin_auth') !== 'true') return null;
+  if (checking || !authed) return null;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">

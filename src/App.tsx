@@ -3,14 +3,14 @@ import { Routes, Route } from 'react-router-dom';
 import { ThemeContext } from './lib/theme';
 import Navbar from './components/Navbar';
 import AboutModal from './components/AboutModal';
-import PinModal from './components/PinModal';
+import AdminLoginModal from './components/AdminLoginModal';
 import Home from './pages/Home';
 import Session from './pages/Session';
 import Admin from './pages/Admin';
 
 export default function App() {
   const [showAbout, setShowAbout] = useState(false);
-  const [showPin, setShowPin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') !== 'light');
 
   const toggle = () => {
@@ -39,11 +39,11 @@ export default function App() {
         {showAbout && (
           <AboutModal
             onClose={() => setShowAbout(false)}
-            onAdminClick={() => setShowPin(true)}
+            onAdminClick={() => setShowLogin(true)}
           />
         )}
-        {showPin && (
-          <PinModal onClose={() => setShowPin(false)} />
+        {showLogin && (
+          <AdminLoginModal onClose={() => setShowLogin(false)} />
         )}
       </div>
     </ThemeContext.Provider>

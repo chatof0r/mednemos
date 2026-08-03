@@ -116,7 +116,17 @@ export default function Home() {
 
     // Filtrage source / années
     const annaleFiltered = selectedAnnees.length < annees.length;
-    if (includeRoneo && annaleFiltered) {
+    // Toutes les années désélectionnées : `.in('annee', [])` / `annee.in.()` produirait
+    // une liste vide invalide côté requête — on gère ce cas explicitement.
+    const noYearsSelected = annees.length > 0 && selectedAnnees.length === 0;
+
+    if (noYearsSelected && !includeRoneo) {
+      alert('Aucune question disponible pour cette sélection.');
+      setLaunching(false);
+      return;
+    } else if (noYearsSelected && includeRoneo) {
+      query = query.eq('source', 'ronéo');
+    } else if (includeRoneo && annaleFiltered) {
       // ronéo OU (annales avec filtre d'année)
       query = query.or(`source.eq.ronéo,annee.in.(${selectedAnnees.join(',')})`);
     } else if (includeRoneo && !annaleFiltered) {

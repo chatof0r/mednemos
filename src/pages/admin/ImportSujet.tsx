@@ -567,6 +567,11 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
     let savedCount = 0;
     // Numérotation séquentielle inter-sections pour les isolées
     let isoléesSaveOffset = 0;
+    // Une question sans réponse détectée ne doit jamais être publiée telle quelle
+    // (sinon un étudiant qui ne répond rien obtient la note maximale) — elle reste
+    // en brouillon même si le lot est publié, à compléter manuellement ensuite.
+    const qStatut = (q: ParsedQuestion) =>
+      statut === 'publiee' && q.reponses.length === 0 ? 'brouillon' : statut;
 
     for (const section of sections) {
       if (section.type === 'dp' || section.type === 'dl') {
@@ -622,7 +627,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               cours:           null,
               image_url:       q.needsImage ? '__PENDING__' : null,
               hotspot:         null,
-              statut,
+              statut:          qStatut(q),
               numero_officiel: source === 'ronéo' ? null : q.numero,
               dossier_id:      dossierId,
               ordre_dossier:   i + 1,
@@ -664,7 +669,7 @@ export default function ImportSujet({ onDone, onCancel }: Props) {
               cours:           null,
               image_url:       q.needsImage ? '__PENDING__' : null,
               hotspot:         null,
-              statut,
+              statut:          qStatut(q),
               numero_officiel: source === 'ronéo' ? null : adjNum,
               dossier_id:      null,
               ordre_dossier:   null,
