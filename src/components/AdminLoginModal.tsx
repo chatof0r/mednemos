@@ -43,15 +43,15 @@ export default function AdminLoginModal({ onClose }: AdminLoginModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-[#141414] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-8 transition-colors">
+      <div className="bg-brand dark:bg-charcoal border border-white/15 dark:border-brand/40 rounded-2xl shadow-2xl w-full max-w-sm p-8 transition-colors">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-            <svg className="w-5 h-5 text-slate-500 dark:text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-12 h-12 bg-white/10 border border-white/15 dark:border-brand/30 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg className="w-5 h-5 text-ink/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Espace administrateur</h2>
-          <p className="text-sm text-slate-400 dark:text-white/30 mt-1">Connectez-vous pour continuer</p>
+          <h2 className="text-lg font-semibold text-ink">Espace administrateur</h2>
+          <p className="text-sm text-ink/30 mt-1">Connectez-vous pour continuer</p>
         </div>
 
         <div className="space-y-3">
@@ -63,8 +63,8 @@ export default function AdminLoginModal({ onClose }: AdminLoginModalProps) {
             onKeyDown={handleKeyDown}
             placeholder="Email"
             autoComplete="username"
-            className={`w-full border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/20 text-sm
-              ${error ? 'border-red-400 dark:border-red-500/50' : 'border-slate-200 dark:border-white/10 focus:border-[#e3fe52]/60 dark:focus:border-[#e3fe52]/40'}`}
+            className={`w-full border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white/5 text-ink placeholder:text-ink/20 text-sm
+              ${error ? 'border-red-400 dark:border-red-500/50' : 'border-white/15 dark:border-brand/30 focus:border-white/40 dark:focus:border-brand/70'}`}
           />
           <input
             type="password"
@@ -73,29 +73,29 @@ export default function AdminLoginModal({ onClose }: AdminLoginModalProps) {
             onKeyDown={handleKeyDown}
             placeholder="Mot de passe"
             autoComplete="current-password"
-            className={`w-full border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/20 text-sm
-              ${error ? 'border-red-400 dark:border-red-500/50' : 'border-slate-200 dark:border-white/10 focus:border-[#e3fe52]/60 dark:focus:border-[#e3fe52]/40'}`}
+            className={`w-full border-2 rounded-xl px-4 py-3 outline-none transition-colors bg-white/5 text-ink placeholder:text-ink/20 text-sm
+              ${error ? 'border-red-400 dark:border-red-500/50' : 'border-white/15 dark:border-brand/30 focus:border-white/40 dark:focus:border-brand/70'}`}
           />
         </div>
 
         {error && (
-          <p className="text-center text-sm text-red-500 dark:text-red-400/80 mt-3">{error}</p>
+          <p className="text-center text-sm text-red-300 dark:text-red-400 mt-3">{error}</p>
         )}
 
         <button
           onClick={login}
           disabled={!email.trim() || !password || loading}
           className="w-full mt-4 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-30
-            bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 border border-transparent dark:border-[#e3fe52]/50
-            text-[#0c0c0c] dark:text-[#0c0c0c]
-            hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65"
+            bg-white dark:bg-brand
+            text-brand dark:text-ink
+            hover:bg-white/90 dark:hover:bg-brand/80"
         >
           {loading ? 'Connexion...' : 'Accéder'}
         </button>
 
         <button
           onClick={onClose}
-          className="w-full mt-2 py-2 text-sm text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50 transition-colors"
+          className="w-full mt-2 py-2 text-sm text-ink/30 hover:text-ink/60 transition-colors"
         >
           Annuler
         </button>

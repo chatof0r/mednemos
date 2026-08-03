@@ -27,7 +27,7 @@ export default function App() {
 
   return (
     <ThemeContext.Provider value={{ isDark, toggle }}>
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0c0c0c] transition-colors duration-200">
+      <div className="min-h-screen bg-brand dark:bg-charcoal text-ink transition-colors duration-200">
         <Navbar onLogoClick={() => setShowAbout(true)} />
         <main>
           <Routes>

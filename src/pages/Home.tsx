@@ -162,20 +162,20 @@ export default function Home() {
   const coursOptions = selectedMatiere ? (COURSES[selectedMatiere] ?? []) : [];
   const allYearsSelected = selectedAnnees.length === annees.length;
 
-  const btnSelected = 'bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 border-[#e3fe52]/60 text-[#0c0c0c] dark:text-[#0c0c0c]';
-  const btnDefault = 'bg-white dark:bg-[#141414] border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/60 hover:border-slate-300 dark:hover:border-white/20';
-  const btnDisabled = 'bg-white dark:bg-[#141414] border-slate-100 dark:border-white/5 text-slate-300 dark:text-white/20 line-through';
+  const btnSelected = 'bg-white dark:bg-brand border-white/60 dark:border-brand/60 text-brand dark:text-ink';
+  const btnDefault = 'bg-white/5 border-white/15 dark:border-brand/30 text-ink/60 hover:border-white/30 dark:hover:border-brand/60';
+  const btnDisabled = 'bg-white/5 border-white/10 dark:border-brand/15 text-ink/20 line-through';
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2 tracking-tight">MedNemos</h1>
-        <p className="text-slate-500 dark:text-white/40 text-sm">Entraîne-toi sur les annales des examens passés</p>
+        <h1 className="text-3xl font-bold text-ink mb-2 tracking-tight">MedNemos</h1>
+        <p className="text-ink/40 text-sm">Entraîne-toi sur les annales des examens passés</p>
       </div>
 
       {/* Step 1 — Niveau */}
       <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30 mb-3">1 · Niveau</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-ink/30 mb-3">1 · Niveau</p>
         <div className="grid grid-cols-2 gap-4">
           {(['P2', 'D1'] as Niveau[]).map(n => (
             <button key={n}
@@ -194,15 +194,15 @@ export default function Home() {
       {selectedNiveau && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30">2 · Matière</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink/30">2 · Matière</p>
             {period !== 'all' && (
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/5 rounded-lg p-0.5">
+              <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
                 {(['S1', 'S2'] as Sem[]).map(s => (
                   <button key={s} onClick={() => switchSem(s)}
                     className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
                       viewSem === s
-                        ? 'bg-white dark:bg-[#e3fe52]/20 text-slate-800 dark:text-[#e3fe52] shadow-sm'
-                        : 'text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50'
+                        ? 'bg-white/25 dark:bg-brand/40 text-ink shadow-sm'
+                        : 'text-ink/30 hover:text-ink/60'
                     }`}>{s}
                   </button>
                 ))}
@@ -225,7 +225,7 @@ export default function Home() {
       {/* Step 3 — Cours multi-select */}
       {selectedMatiere && coursOptions.length > 0 && (
         <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30 mb-3">3 · Cours</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink/30 mb-3">3 · Cours</p>
           <div className="space-y-2">
             <button onClick={() => setSelectedCours([])}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
@@ -233,7 +233,7 @@ export default function Home() {
               }`}>
               <span className="text-sm font-medium">Tous les cours</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                selectedCours.length === 0 ? 'bg-black/10' : 'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-white/40'
+                selectedCours.length === 0 ? 'bg-black/10' : 'bg-white/10 text-ink/40'
               }`}>{totalRows}</span>
             </button>
             {coursOptions.map(c => {
@@ -246,9 +246,9 @@ export default function Home() {
                   }`}>
                   <span className="text-sm font-medium text-left">{c}</span>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ml-2 ${
-                    isSel ? 'bg-black/10 text-[#0c0c0c]'
-                      : count === 0 ? 'bg-slate-100 dark:bg-white/5 text-slate-300 dark:text-white/20'
-                        : 'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-white/40'
+                    isSel ? 'bg-black/10 text-brand dark:text-ink'
+                      : count === 0 ? 'bg-white/5 text-ink/20'
+                        : 'bg-white/10 text-ink/40'
                   }`}>{count}</span>
                 </button>
               );
@@ -261,13 +261,13 @@ export default function Home() {
       {selectedMatiere && (annees.length > 0 || hasRoneo) && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink/30">
               {coursOptions.length > 0 ? '4' : '3'} · Année
             </p>
             {annees.length > 0 && !allYearsSelected && (
               <button
                 onClick={() => setSelectedAnnees(annees)}
-                className="text-xs text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60 transition-colors underline underline-offset-2"
+                className="text-xs text-ink/30 hover:text-ink/60 transition-colors underline underline-offset-2"
               >
                 Tout réactiver
               </button>
@@ -302,7 +302,7 @@ export default function Home() {
       {/* Step 5 — Ordre */}
       {selectedMatiere && (
         <div className="mb-10">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-white/30 mb-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink/30 mb-3">
             {coursOptions.length > 0 ? '5' : annees.length > 0 ? '4' : '3'} · Ordre
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -313,13 +313,13 @@ export default function Home() {
               <button key={o.key} onClick={() => setOrder(o.key)}
                 className={`p-4 rounded-xl border-2 text-left transition-all ${
                   order === o.key
-                    ? 'border-[#e3fe52]/50 bg-[#e3fe52]/5'
-                    : 'border-slate-200 dark:border-white/10 bg-white dark:bg-[#141414] hover:border-slate-300 dark:hover:border-white/20'
+                    ? 'border-white/60 dark:border-brand/60 bg-white/10 dark:bg-brand/10'
+                    : 'border-white/15 dark:border-brand/30 bg-white/5 hover:border-white/30 dark:hover:border-brand/60'
                 }`}>
                 <div className={`text-sm font-semibold mb-0.5 ${
-                  order === o.key ? 'text-slate-800 dark:text-[#e3fe52]' : 'text-slate-700 dark:text-white/70'
+                  order === o.key ? 'text-ink' : 'text-ink/70'
                 }`}>{o.label}</div>
-                <div className="text-xs text-slate-400 dark:text-white/30">{o.sub}</div>
+                <div className="text-xs text-ink/30">{o.sub}</div>
               </button>
             ))}
           </div>
@@ -329,9 +329,9 @@ export default function Home() {
       <button onClick={handleLaunch}
         disabled={!selectedNiveau || !selectedMatiere || launching}
         className="w-full py-4 rounded-2xl font-semibold text-base transition-all
-          bg-[#e3fe52]/75 dark:bg-[#e3fe52]/50 border border-transparent dark:border-[#e3fe52]/30
-          text-[#0c0c0c] dark:text-[#0c0c0c]
-          hover:bg-[#e3fe52]/90 dark:hover:bg-[#e3fe52]/65
+          bg-white dark:bg-brand border border-transparent dark:border-brand/50
+          text-brand dark:text-ink
+          hover:bg-white/90 dark:hover:bg-brand/80
           disabled:opacity-25 disabled:cursor-not-allowed">
         {launching ? 'Chargement...' : 'Lancer la session →'}
       </button>
