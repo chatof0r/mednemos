@@ -14,8 +14,13 @@ export default function Admin() {
   const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
+    const checkAdmin = async (userId: string) => {
+      const { data } = await supabase.from('profiles').select('is_admin').eq('id', userId).maybeSingle();
+      return data?.is_admin ?? false;
+    };
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session || !(await checkAdmin(session.user.id))) {
         navigate('/', { replace: true });
       } else {
         setAuthed(true);
@@ -23,8 +28,8 @@ export default function Admin() {
       setChecking(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) navigate('/', { replace: true });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session || !(await checkAdmin(session.user.id))) navigate('/', { replace: true });
     });
     return () => subscription.unsubscribe();
   }, [navigate]);

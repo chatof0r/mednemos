@@ -65,18 +65,100 @@ create table if not exists public.suggestions (
   lu          boolean not null default false
 );
 
+-- Table des profils utilisateurs (étudiants)
+-- Une ligne par compte Supabase Auth (auth.users), créée automatiquement
+-- par le trigger on_auth_user_created ci-dessous.
+create table if not exists public.profiles (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  email       text not null,
+  nom         text,
+  prenom      text,
+  niveau      text check (niveau in ('P2', 'D1')),
+  faculte     text,
+  is_admin    boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+
+-- Rempli automatiquement public.profiles à la création d'un compte Supabase
+-- Auth, à partir des métadonnées passées lors du signInWithOtp (voir README).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, nom, prenom, niveau, faculte)
+  values (
+    new.id,
+    new.email,
+    new.raw_user_meta_data->>'nom',
+    new.raw_user_meta_data->>'prenom',
+    new.raw_user_meta_data->>'niveau',
+    new.raw_user_meta_data->>'faculte'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- Rattrapage : comptes auth.users déjà créés avant la mise en place du trigger
+-- (ex. le compte admin créé manuellement depuis le dashboard Supabase).
+insert into public.profiles (id, email)
+select id, email from auth.users
+on conflict (id) do nothing;
+
+-- Renvoie true si l'utilisateur courant (auth.uid()) est marqué admin.
+-- Utilisé par les policies d'écriture ci-dessous.
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+$$;
+
 -- =============================================================
 -- Row Level Security (RLS)
 -- =============================================================
 --
 -- L'accès admin ne repose plus sur un PIN vérifié côté client : les
 -- écritures (insert/update/delete) exigent une session Supabase Auth
--- authentifiée (voir README — "Accès à l'administration"). La clé
--- anon ne donne jamais, à elle seule, un accès en écriture.
+-- authentifiée ET marquée is_admin=true (voir README — "Accès à
+-- l'administration"). La clé anon ne donne jamais, à elle seule, un accès
+-- en écriture. Un compte étudiant authentifié (profil non-admin) ne peut
+-- ni écrire les dossiers/questions/suggestions, ni s'auto-promouvoir admin
+-- (voir revoke sur profiles.is_admin plus bas).
 
 alter table public.dossiers enable row level security;
 alter table public.questions enable row level security;
 alter table public.suggestions enable row level security;
+alter table public.profiles enable row level security;
+
+-- ── Profiles ──────────────────────────────────────────────────
+drop policy if exists "profiles_select_own" on public.profiles;
+create policy "profiles_select_own"
+  on public.profiles for select
+  to authenticated
+  using (auth.uid() = id);
+
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own"
+  on public.profiles for update
+  to authenticated
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+-- Un utilisateur authentifié peut modifier sa ligne (policy ci-dessus) mais
+-- ne peut jamais toucher à la colonne is_admin, même via une requête REST
+-- forgée à la main : seul un rôle avec accès direct à Postgres (service_role,
+-- SQL editor) le peut.
+revoke update (is_admin) on public.profiles from authenticated;
 
 -- ── Dossiers ──────────────────────────────────────────────────
 drop policy if exists "dossiers_select_publiee" on public.dossiers;
@@ -89,8 +171,8 @@ drop policy if exists "dossiers_write_admin" on public.dossiers;
 create policy "dossiers_write_admin"
   on public.dossiers for all
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
 -- ── Questions ─────────────────────────────────────────────────
 drop policy if exists "questions_select_publiee" on public.questions;
@@ -103,8 +185,8 @@ drop policy if exists "questions_write_admin" on public.questions;
 create policy "questions_write_admin"
   on public.questions for all
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
 -- ── Suggestions ───────────────────────────────────────────────
 -- insert public : les étudiants peuvent envoyer des suggestions sans être connectés
@@ -118,20 +200,20 @@ drop policy if exists "suggestions_read_write_admin" on public.suggestions;
 create policy "suggestions_read_write_admin"
   on public.suggestions for select
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 drop policy if exists "suggestions_update_admin" on public.suggestions;
 create policy "suggestions_update_admin"
   on public.suggestions for update
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
 drop policy if exists "suggestions_delete_admin" on public.suggestions;
 create policy "suggestions_delete_admin"
   on public.suggestions for delete
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 -- =============================================================
 -- Storage : bucket pour les images de questions
@@ -147,7 +229,7 @@ drop policy if exists "images_upload_admin" on storage.objects;
 create policy "images_upload_admin"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'question-images');
+  with check (bucket_id = 'question-images' and public.is_admin());
 
 drop policy if exists "images_read_public" on storage.objects;
 create policy "images_read_public"
@@ -159,7 +241,7 @@ drop policy if exists "images_delete_admin" on storage.objects;
 create policy "images_delete_admin"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'question-images');
+  using (bucket_id = 'question-images' and public.is_admin());
 
 -- =============================================================
 -- Index utiles
@@ -170,3 +252,4 @@ create index if not exists questions_statut_idx on public.questions (statut);
 create index if not exists questions_dossier_id_idx on public.questions (dossier_id);
 create index if not exists dossiers_statut_idx on public.dossiers (statut);
 create index if not exists suggestions_lu_idx on public.suggestions (lu);
+create index if not exists profiles_email_idx on public.profiles (email);

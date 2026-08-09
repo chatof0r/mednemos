@@ -233,7 +233,7 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
   const ref = getQuestionRef(question);
 
   return (
-    <div className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/25 rounded-2xl shadow-sm p-6 sm:p-8 transition-colors">
+    <div className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/60 rounded-2xl shadow-sm p-6 sm:p-8 transition-colors">
       {/* Progress + badge */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-ink/30 font-medium">{index + 1} / {total}</span>
@@ -320,7 +320,7 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
               value={qrocInput}
               onChange={e => { setQrocInput(e.target.value); onQROCInput(question.id, e.target.value); }}
               placeholder="Votre réponse…"
-              className="w-full border border-white/20 dark:border-brand/35 rounded-xl px-4 py-3 text-sm text-ink bg-white dark:bg-white/5 outline-none focus:ring-2 focus:ring-white/40 dark:focus:ring-brand/50 focus:border-white/40 dark:focus:border-brand/50"
+              className="w-full border border-white/20 dark:border-brand/70 rounded-xl px-4 py-3 text-sm text-brand dark:text-ink bg-white dark:bg-white/5 placeholder:text-brand/40 dark:placeholder:text-ink/30 outline-none focus:ring-2 focus:ring-white/40 dark:focus:ring-brand/80 focus:border-white/40 dark:focus:border-brand/85"
             />
           ) : (
             <div className="space-y-2">
@@ -334,7 +334,7 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
                   : <XIcon className="w-4 h-4 shrink-0" />}
                 Votre réponse :&nbsp;<span className="font-semibold">{selected[0] || '—'}</span>
               </div>
-              <div className="px-4 py-2.5 rounded-xl bg-white/5 dark:bg-brand/10 border border-white/15 dark:border-brand/30 text-xs text-ink/40">
+              <div className="px-4 py-2.5 rounded-xl bg-white/5 dark:bg-brand/10 border border-white/15 dark:border-brand/65 text-xs text-ink/40">
                 Réponse{question.reponses.length > 1 ? 's' : ''} acceptée{question.reponses.length > 1 ? 's' : ''} :&nbsp;
                 <span className="font-medium text-ink/70">{question.reponses.join(', ')}</span>
               </div>
@@ -354,12 +354,12 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
             return (
               <div key={item.label} className={`rounded-xl border p-3 transition-all ${
                 !validated
-                  ? 'border-white/15 dark:border-brand/30 bg-white dark:bg-transparent'
+                  ? 'border-white/15 dark:border-brand/65 bg-white/10 dark:bg-transparent'
                   : isCorrect
                     ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
                     : (isWrong || missed)
                       ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
-                      : 'border-white/10 dark:border-brand/20'
+                      : 'border-white/10 dark:border-brand/55'
               }`}>
                 <div className="flex items-start gap-2.5">
                   {validated && (
@@ -380,7 +380,7 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
                     </div>
                     {!validated ? (
                       <select value={userChoice} onChange={e => onQSSelect(question.id, item.label, e.target.value)}
-                        className="w-full border border-white/20 dark:border-brand/35 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-white/5 text-ink/90 outline-none focus:ring-2 focus:ring-white/40 dark:focus:ring-brand/50">
+                        className="w-full border border-white/20 dark:border-brand/70 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-white/5 text-brand dark:text-ink/90 outline-none focus:ring-2 focus:ring-white/40 dark:focus:ring-brand/80">
                         <option value="">— choisir —</option>
                         {(item.choices ?? []).map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -403,7 +403,7 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
         <div className="space-y-2">
           {/* Badge question neutralisée */}
           {neutralisee && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-white/10 dark:bg-brand/10 rounded-xl border border-white/15 dark:border-brand/30 text-xs text-ink/40">
+            <div className="flex items-center gap-2 px-3 py-2 bg-white/10 dark:bg-brand/10 rounded-xl border border-white/15 dark:border-brand/65 text-xs text-ink/40">
               <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
               </svg>
@@ -419,8 +419,8 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
 
             // Item neutralisé → toujours grisé, non sélectionnable
             if (isNeutr) return (
-              <div key={item.label} className="rounded-xl border border-white/10 dark:border-brand/20 bg-white/50 dark:bg-transparent opacity-50 p-3 flex items-start gap-3">
-                <div className="shrink-0 w-5 h-5 rounded-md border-2 border-white/20 dark:border-brand/35 bg-white/50 dark:bg-transparent flex items-center justify-center">
+              <div key={item.label} className="rounded-xl border border-white/10 dark:border-brand/55 bg-white/10 dark:bg-transparent opacity-50 p-3 flex items-start gap-3">
+                <div className="shrink-0 w-5 h-5 rounded-md border-2 border-white/20 dark:border-brand/70 bg-white/50 dark:bg-transparent flex items-center justify-center">
                   <svg className="w-3 h-3 text-ink/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
                   </svg>
@@ -436,19 +436,19 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
 
             const containerClass = !validated
               ? isSelected
-                ? 'border-white/50 dark:border-brand/50 bg-white/10 dark:bg-brand/10'
-                : 'border-white/15 dark:border-brand/30 bg-white dark:bg-transparent hover:border-white/30 dark:hover:border-brand/45'
+                ? 'border-white/50 dark:border-brand/85 bg-white/10 dark:bg-brand/10'
+                : 'border-white/15 dark:border-brand/65 bg-white/10 dark:bg-transparent hover:border-white/30 dark:hover:border-brand/80'
               : isCorrect
                 ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
                 : isSelected
                   ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
-                  : 'border-white/10 dark:border-brand/20 bg-white/50 dark:bg-transparent';
+                  : 'border-white/10 dark:border-brand/55 bg-white/10 dark:bg-transparent';
 
             const iconBg = !validated
-              ? isSelected ? 'border-white bg-white dark:border-brand dark:bg-brand' : 'border-white/30 dark:border-brand/45 bg-white dark:bg-transparent'
+              ? isSelected ? 'border-white bg-white dark:border-brand dark:bg-brand' : 'border-white/30 dark:border-brand/80 bg-white dark:bg-transparent'
               : isCorrect ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
                 : isSelected ? 'border-red-500 bg-red-500'
-                  : 'border-white/15 dark:border-brand/25 bg-white/50 dark:bg-transparent';
+                  : 'border-white/15 dark:border-brand/60 bg-white/50 dark:bg-transparent';
 
             const labelColor = !validated ? 'text-ink/70'
               : isCorrect ? 'text-green-700 dark:text-green-400'
@@ -487,7 +487,7 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
                     state === 'correct-checked' ? 'border-green-200/50 dark:border-green-500/20 text-green-700 dark:text-green-400'
                       : state === 'incorrect-checked' ? 'border-red-200/50 dark:border-red-500/20 text-red-600 dark:text-red-400'
                         : state === 'correct-missed' ? 'border-green-300/50 dark:border-green-400/20 text-green-800 dark:text-green-300'
-                          : 'border-white/10 dark:border-brand/20 text-ink/40'}`}>
+                          : 'border-white/10 dark:border-brand/55 text-ink/40'}`}>
                     {item.justification}
                   </div>
                 )}
@@ -509,12 +509,12 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
       <div className="mt-6 flex flex-col gap-3">
         {!validated ? (
           <button onClick={onValidate}
-            className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/60 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80">
+            className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/95 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80">
             Valider
           </button>
         ) : (
           <button onClick={onNext}
-            className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/60 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80">
+            className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/95 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80">
             {isLast ? 'Voir les résultats' : 'Question suivante →'}
           </button>
         )}
@@ -528,14 +528,14 @@ function QuestionCard({ question, selected, validated, onToggle, onQSSelect, onQ
             <p className="text-xs font-medium text-ink/60 mb-2">Remarque sur cette question</p>
             <textarea value={remarkText} onChange={e => setRemarkText(e.target.value)} rows={2}
               placeholder="Décris l'erreur ou ta suggestion..."
-              className="w-full text-xs border border-black/10 dark:border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-white/40 dark:focus:border-brand/50 resize-none bg-white/15 dark:bg-brand/25 text-ink placeholder:text-ink/30 dark:placeholder:text-white/40" />
+              className="w-full text-xs border border-black/10 dark:border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-white/40 dark:focus:border-brand/85 resize-none bg-white/15 dark:bg-brand/25 text-ink placeholder:text-ink/30 dark:placeholder:text-white/40" />
             <div className="flex gap-2 mt-2">
               <button onClick={sendRemark} disabled={!remarkText.trim()}
-                className="flex-1 text-xs py-1.5 rounded-lg bg-white dark:bg-brand dark:border dark:border-brand/60 text-brand dark:text-ink font-medium hover:bg-white/90 dark:hover:bg-brand/80 disabled:opacity-30 transition-colors">
+                className="flex-1 text-xs py-1.5 rounded-lg bg-white dark:bg-brand dark:border dark:border-brand/95 text-brand dark:text-ink font-medium hover:bg-white/90 dark:hover:bg-brand/80 disabled:opacity-30 transition-colors">
                 {remarkSent ? '✓ Envoyé' : 'Envoyer'}
               </button>
               <button onClick={() => setShowRemark(false)}
-                className="flex-1 text-xs py-1.5 rounded-lg border border-white/15 dark:border-brand/30 text-ink/40 hover:text-ink/80 transition-colors">
+                className="flex-1 text-xs py-1.5 rounded-lg border border-white/15 dark:border-brand/65 text-ink/40 hover:text-ink/80 transition-colors">
                 Annuler
               </button>
             </div>
@@ -582,9 +582,9 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
   }, [showCorrection]);
 
   return (
-    <div className="border border-white/15 dark:border-brand/30 rounded-xl overflow-hidden">
+    <div className="border border-white/15 dark:border-brand/65 rounded-xl overflow-hidden">
       {/* Question header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-white/5 dark:bg-brand/10 border-b border-white/8 dark:border-brand/15">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-white/5 dark:bg-brand/10 border-b border-white/8 dark:border-brand/50">
         <span className="text-xs font-bold text-ink/40">Q{qIndex + 1}</span>
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
           question.type === 'QCM'
@@ -620,7 +620,7 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
               <input type="text" value={qrocInput}
                 onChange={e => { setQrocInput(e.target.value); onQROCInput(e.target.value); }}
                 placeholder="Votre réponse…"
-                className="w-full border border-white/20 dark:border-brand/35 rounded-lg px-3 py-2 text-sm bg-white dark:bg-white/5 text-ink/90 outline-none focus:ring-2 focus:ring-white/40 dark:focus:ring-brand/50" />
+                className="w-full border border-white/20 dark:border-brand/70 rounded-lg px-3 py-2 text-sm bg-white dark:bg-white/5 text-brand dark:text-ink/90 outline-none focus:ring-2 focus:ring-white/40 dark:focus:ring-brand/80" />
             ) : showCorrection ? (
               <div className="space-y-1.5">
                 <div className={`px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${scoreForQuestion(question, selected) === 1 ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'}`}>
@@ -645,17 +645,17 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
               const missed     = showCorrection && !userChoice && !!item.correct;
               return (
                 <div key={item.label} className={`rounded-lg border p-2.5 transition-all ${
-                  !isValidated ? 'border-white/15 dark:border-brand/30'
-                    : !showCorrection ? 'border-white/8 dark:border-brand/15 opacity-60'
+                  !isValidated ? 'border-white/15 dark:border-brand/65'
+                    : !showCorrection ? 'border-white/8 dark:border-brand/50 opacity-60'
                       : isCorrect ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
                         : (isWrong || missed) ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
-                          : 'border-white/10 dark:border-brand/20'
+                          : 'border-white/10 dark:border-brand/55'
                 }`}>
                   {item.image_url && <img src={item.image_url} alt="" className="w-full max-h-24 object-contain rounded mb-1.5 bg-white/5 dark:bg-brand/10" />}
                   <p className="text-xs text-ink/40 mb-1.5"><span className="font-semibold">{item.label}.</span> {item.enonce}</p>
                   {isInteractive && !isValidated ? (
                     <select value={userChoice} onChange={e => onQSSelect(item.label, e.target.value)}
-                      className="w-full border border-white/20 dark:border-brand/35 rounded px-2 py-1 text-xs bg-white dark:bg-white/5 text-ink/90 outline-none">
+                      className="w-full border border-white/20 dark:border-brand/70 rounded px-2 py-1 text-xs bg-white dark:bg-white/5 text-brand dark:text-ink/90 outline-none">
                       <option value="">— choisir —</option>
                       {(item.choices ?? []).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
@@ -689,8 +689,8 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
             const isCorrect  = question.reponses.includes(item.label);
 
             if (isNeutr) return (
-              <div key={item.label} className="rounded-lg border border-white/10 dark:border-brand/20 opacity-50 p-2.5 flex items-start gap-2.5">
-                <div className="shrink-0 w-[18px] h-[18px] flex items-center justify-center rounded-md border-2 border-white/20 dark:border-brand/35">
+              <div key={item.label} className="rounded-lg border border-white/10 dark:border-brand/55 opacity-50 p-2.5 flex items-start gap-2.5">
+                <div className="shrink-0 w-[18px] h-[18px] flex items-center justify-center rounded-md border-2 border-white/20 dark:border-brand/70">
                   <svg className="w-2.5 h-2.5 text-ink/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" /></svg>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -703,21 +703,21 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
             );
 
             if (!isValidated) {
-              containerClass = isSelected ? 'border-white/50 dark:border-brand/50 bg-white/10 dark:bg-brand/10' : 'border-white/15 dark:border-brand/30 hover:border-white/30 dark:hover:border-brand/45';
-              iconBg = isSelected ? 'border-white bg-white dark:border-brand dark:bg-brand' : 'border-white/30 dark:border-brand/45';
+              containerClass = isSelected ? 'border-white/50 dark:border-brand/85 bg-white/10 dark:bg-brand/10' : 'border-white/15 dark:border-brand/65 hover:border-white/30 dark:hover:border-brand/80';
+              iconBg = isSelected ? 'border-white bg-white dark:border-brand dark:bg-brand' : 'border-white/30 dark:border-brand/80';
               labelColor = 'text-ink/70';
               textColor = 'text-ink/90';
               showCheck = isSelected;
             } else if (!showCorrection) {
-              containerClass = isSelected ? 'border-white/30 dark:border-brand/45 bg-white/10 dark:bg-brand/15' : 'border-white/8 dark:border-brand/15 opacity-60';
-              iconBg = isSelected ? 'border-white/40 bg-white/20 dark:border-brand/50 dark:bg-brand/20' : 'border-white/15 dark:border-brand/30';
+              containerClass = isSelected ? 'border-white/30 dark:border-brand/80 bg-white/10 dark:bg-brand/15' : 'border-white/8 dark:border-brand/50 opacity-60';
+              iconBg = isSelected ? 'border-white/40 bg-white/20 dark:border-brand/85 dark:bg-brand/20' : 'border-white/15 dark:border-brand/65';
               labelColor = 'text-ink/40';
               textColor = 'text-ink/50';
               showCheck = isSelected;
             } else {
               containerClass = isCorrect ? 'border-green-300/70 dark:border-green-500/30 bg-green-50/80 dark:bg-green-500/10'
                 : isSelected ? 'border-red-400/70 dark:border-red-500/40 bg-red-50/90 dark:bg-red-500/15'
-                  : 'border-white/10 dark:border-brand/20 opacity-50';
+                  : 'border-white/10 dark:border-brand/55 opacity-50';
               iconBg = isCorrect ? 'border-green-400 bg-green-400 dark:border-green-500 dark:bg-green-500/80'
                 : isSelected ? 'border-red-500 bg-red-500' : 'border-white/20 bg-white/5 dark:bg-transparent';
               labelColor = isCorrect ? 'text-green-700 dark:text-green-400' : isSelected ? 'text-red-700 dark:text-red-400' : 'text-ink/30';
@@ -767,7 +767,7 @@ function DossierQuestion({ question, qIndex, selected, isValidated, showCorrecti
         {isInteractive && !isValidated && (
           <button
             onClick={onValidate}
-            className="mt-4 w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/60 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80"
+            className="mt-4 w-full py-2.5 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/95 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80"
           >
             Valider
           </button>
@@ -816,7 +816,7 @@ function DossierCard({ item, answers, validated, onToggle, onQSSelect, onQROCInp
     : null;
 
   return (
-    <div className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/25 rounded-2xl shadow-sm p-6 sm:p-8 transition-colors">
+    <div className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/60 rounded-2xl shadow-sm p-6 sm:p-8 transition-colors">
       {/* Progress + badge */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-ink/30 font-medium">{index + 1} / {total}</span>
@@ -839,7 +839,7 @@ function DossierCard({ item, answers, validated, onToggle, onQSSelect, onQROCInp
       ) : <div className="mb-5" />}
 
       {/* Dossier header */}
-      <div className="mb-6 pb-6 border-b border-white/10 dark:border-brand/25">
+      <div className="mb-6 pb-6 border-b border-white/10 dark:border-brand/60">
         <h2 className="text-base font-bold text-ink mb-3">{dossier.titre}</h2>
         {dossier.image_url && (
           <img src={dossier.image_url} alt="Illustration" className="w-full max-h-64 object-contain rounded-xl mb-3 bg-white/5 dark:bg-brand/10" />
@@ -888,7 +888,7 @@ function DossierCard({ item, answers, validated, onToggle, onQSSelect, onQROCInp
       {allValidated && (
         <button
           onClick={onContinue}
-          className="mt-6 w-full py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/60 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80"
+          className="mt-6 w-full py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/95 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80"
         >
           {isLast ? 'Voir les résultats' : 'Continuer →'}
         </button>
@@ -917,7 +917,7 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <div className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/25 rounded-2xl shadow-sm p-8 text-center mb-8 transition-colors">
+      <div className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/60 rounded-2xl shadow-sm p-8 text-center mb-8 transition-colors">
         <div className={`text-6xl font-bold mb-2 ${color}`}>{displayScore}<span className="text-3xl text-ink/20">/{countableQs.length}</span></div>
         <div className="text-ink/30 text-sm mb-5">
           {pct}% de réussite
@@ -927,7 +927,7 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
           <div className={`h-2 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
         <button onClick={onRestart}
-          className="px-6 py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/60 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80">
+          className="px-6 py-3 rounded-xl font-semibold text-sm transition-all bg-white dark:bg-brand dark:border dark:border-brand/95 text-brand dark:text-ink hover:bg-white/90 dark:hover:bg-brand/80">
           Nouvelle session
         </button>
       </div>
@@ -947,7 +947,7 @@ function Results({ questions, answers, onRestart }: ResultsProps) {
                 return s === 'incorrect-checked' || s === 'correct-missed';
               });
               return (
-                <div key={q.id} className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/25 rounded-2xl p-5 transition-colors">
+                <div key={q.id} className="bg-brand dark:bg-charcoal border border-white/10 dark:border-brand/60 rounded-2xl p-5 transition-colors">
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${

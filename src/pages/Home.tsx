@@ -162,9 +162,9 @@ export default function Home() {
   const coursOptions = selectedMatiere ? (COURSES[selectedMatiere] ?? []) : [];
   const allYearsSelected = selectedAnnees.length === annees.length;
 
-  const btnSelected = 'bg-white dark:bg-brand border-white/60 dark:border-brand/60 text-brand dark:text-ink';
-  const btnDefault = 'bg-white/5 border-white/15 dark:border-brand/30 text-ink/60 hover:border-white/30 dark:hover:border-brand/60';
-  const btnDisabled = 'bg-white/5 border-white/10 dark:border-brand/15 text-ink/20 line-through';
+  const btnSelected = 'bg-white dark:bg-brand border-white/60 dark:border-brand/95 text-brand dark:text-ink';
+  const btnDefault = 'bg-white/5 border-white/15 dark:border-brand/65 text-ink/60 hover:border-white/30 dark:hover:border-brand/95';
+  const btnDisabled = 'bg-white/5 border-white/10 dark:border-brand/50 text-ink/20 line-through';
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -313,8 +313,8 @@ export default function Home() {
               <button key={o.key} onClick={() => setOrder(o.key)}
                 className={`p-4 rounded-xl border-2 text-left transition-all ${
                   order === o.key
-                    ? 'border-white/60 dark:border-brand/60 bg-white/10 dark:bg-brand/10'
-                    : 'border-white/15 dark:border-brand/30 bg-white/5 hover:border-white/30 dark:hover:border-brand/60'
+                    ? 'border-white/60 dark:border-brand/95 bg-white/10 dark:bg-brand/10'
+                    : 'border-white/15 dark:border-brand/65 bg-white/5 hover:border-white/30 dark:hover:border-brand/95'
                 }`}>
                 <div className={`text-sm font-semibold mb-0.5 ${
                   order === o.key ? 'text-ink' : 'text-ink/70'
@@ -329,7 +329,7 @@ export default function Home() {
       <button onClick={handleLaunch}
         disabled={!selectedNiveau || !selectedMatiere || launching}
         className="w-full py-4 rounded-2xl font-semibold text-base transition-all
-          bg-white dark:bg-brand border border-transparent dark:border-brand/50
+          bg-white dark:bg-brand border border-transparent dark:border-brand/85
           text-brand dark:text-ink
           hover:bg-white/90 dark:hover:bg-brand/80
           disabled:opacity-25 disabled:cursor-not-allowed">

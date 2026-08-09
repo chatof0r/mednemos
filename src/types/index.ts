@@ -62,6 +62,17 @@ export interface Dossier {
   type_dossier: 'dp' | 'dl';
 }
 
+export interface Profile {
+  id: string;
+  email: string;
+  nom: string | null;
+  prenom: string | null;
+  niveau: 'P2' | 'D1' | null;
+  faculte: string | null;
+  is_admin: boolean;
+  created_at: string;
+}
+
 export interface Suggestion {
   id: string;
   created_at: string;

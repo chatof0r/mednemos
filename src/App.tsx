@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { ThemeContext } from './lib/theme';
+import { AuthProvider } from './lib/auth';
 import Navbar from './components/Navbar';
 import AboutModal from './components/AboutModal';
 import AdminLoginModal from './components/AdminLoginModal';
 import Home from './pages/Home';
 import Session from './pages/Session';
 import Admin from './pages/Admin';
+import Profile from './pages/Profile';
 
 export default function App() {
   const [showAbout, setShowAbout] = useState(false);
@@ -27,25 +29,28 @@ export default function App() {
 
   return (
     <ThemeContext.Provider value={{ isDark, toggle }}>
-      <div className="min-h-screen bg-brand dark:bg-charcoal text-ink transition-colors duration-200">
-        <Navbar onLogoClick={() => setShowAbout(true)} />
-        <main>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/session" element={<Session />} />
-            <Route path="/admin" element={<Admin />} />
-          </Routes>
-        </main>
-        {showAbout && (
-          <AboutModal
-            onClose={() => setShowAbout(false)}
-            onAdminClick={() => setShowLogin(true)}
-          />
-        )}
-        {showLogin && (
-          <AdminLoginModal onClose={() => setShowLogin(false)} />
-        )}
-      </div>
+      <AuthProvider>
+        <div className="min-h-screen bg-brand dark:bg-charcoal text-ink transition-colors duration-200">
+          <Navbar onLogoClick={() => setShowAbout(true)} />
+          <main>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/session" element={<Session />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/profil" element={<Profile />} />
+            </Routes>
+          </main>
+          {showAbout && (
+            <AboutModal
+              onClose={() => setShowAbout(false)}
+              onAdminClick={() => setShowLogin(true)}
+            />
+          )}
+          {showLogin && (
+            <AdminLoginModal onClose={() => setShowLogin(false)} />
+          )}
+        </div>
+      </AuthProvider>
     </ThemeContext.Provider>
   );
 }
